@@ -1,0 +1,54 @@
+name: meneer_wit
+description: "Meneer Wit - de gratis Nederlandse Undercover / Mister White party game."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  provider: ^6.1.2
+  shared_preferences: ^2.3.2
+  confetti: ^0.8.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/branding/logo.png"
+  remove_alpha_ios: true
+  background_color_ios: "#0B1120"
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/words.json
+    - assets/branding/logo.png
+
+  fonts:
+    - family: Geist
+      fonts:
+        - asset: assets/fonts/Geist-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Geist-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Geist-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Geist-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Geist-Black.ttf
+          weight: 900
+    - family: GeistMono
+      fonts:
+        - asset: assets/fonts/GeistMono-Regular.ttf
+          weight: 400
