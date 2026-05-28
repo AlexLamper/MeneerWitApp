@@ -16,7 +16,7 @@ class ExplanationScreen extends StatelessWidget {
     ),
     (
       'Geef hints',
-      'Om de beurt geeft iedereen één woord als hint dat bij zijn woord past — maar niet te duidelijk!',
+      'Om de beurt geeft iedereen één woord als hint dat bij zijn woord past - maar niet te duidelijk!',
     ),
     (
       'Stem',

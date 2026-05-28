@@ -25,7 +25,7 @@ class HomeScreen extends StatelessWidget {
             const BrandTitle(),
             const SizedBox(height: 14),
             Text(
-              'De gratis Nederlandse versie van Undercover & Mister White — met onbeperkte woorden.',
+              'De gratis Nederlandse versie van Undercover & Mister White - met onbeperkte woorden.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 15,
@@ -76,7 +76,7 @@ class HomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             Text(
-              'Versie 1.0.0 • Meneer Wit — Door Alex Lamper',
+              'Versie 1.0.1 • Meneer Wit - Door Alex Lamper',
               style: TextStyle(
                 fontSize: 11,
                 color: context.palette.mutedForeground.withValues(alpha: 0.7),

@@ -55,11 +55,9 @@ class ThemeToggleButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mode = context.select<AppState, ThemeMode>((s) => s.themeMode);
-    final icon = switch (mode) {
-      ThemeMode.light => Icons.light_mode_outlined,
-      ThemeMode.dark => Icons.dark_mode_outlined,
-      ThemeMode.system => Icons.brightness_auto_outlined,
-    };
+    final icon = mode == ThemeMode.dark
+        ? Icons.dark_mode_outlined
+        : Icons.light_mode_outlined;
     return IconButton(
       tooltip: 'Thema wisselen',
       icon: Icon(icon),

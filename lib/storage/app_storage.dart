@@ -23,26 +23,17 @@ class AppState extends ChangeNotifier {
       AppState(await SharedPreferences.getInstance());
 
   // ----- Theme -----
-  ThemeMode _themeMode = ThemeMode.system;
+  ThemeMode _themeMode = ThemeMode.light;
   ThemeMode get themeMode => _themeMode;
 
   void _loadTheme() {
-    switch (_prefs.getString(_kTheme)) {
-      case 'light':
-        _themeMode = ThemeMode.light;
-      case 'dark':
-        _themeMode = ThemeMode.dark;
-      default:
-        _themeMode = ThemeMode.system;
-    }
+    _themeMode = _prefs.getString(_kTheme) == 'dark'
+        ? ThemeMode.dark
+        : ThemeMode.light;
   }
 
   void cycleTheme() {
-    _themeMode = switch (_themeMode) {
-      ThemeMode.system => ThemeMode.light,
-      ThemeMode.light => ThemeMode.dark,
-      ThemeMode.dark => ThemeMode.system,
-    };
+    _themeMode = _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
     _prefs.setString(_kTheme, _themeMode.name);
     notifyListeners();
   }
