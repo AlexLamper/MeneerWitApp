@@ -2,7 +2,7 @@ name: meneer_wit
 description: "Meneer Wit - de gratis Nederlandse Undercover / Mister White party game."
 publish_to: 'none'
 
-version: 1.0.1+9
+version: 1.0.3+11
 
 environment:
   sdk: ^3.8.0

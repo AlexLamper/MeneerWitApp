@@ -74,6 +74,69 @@ class GameController extends ChangeNotifier {
     _enterCardReveal();
   }
 
+  /// Configure a game where names are entered one-by-one during the
+  /// pass-and-play card reveal (mirrors meneerwit.com). Roles and the word are
+  /// assigned up front; players start with placeholder names.
+  void configureGame({
+    required int count,
+    required GameSettings gameSettings,
+    List<WordPair> custom = const [],
+  }) {
+    players = [
+      for (var i = 0; i < count; i++) Player(id: i, name: 'Speler ${i + 1}'),
+    ];
+    settings = gameSettings;
+    customWords = custom;
+    round = 1;
+    _assignRolesAndWord();
+    _enterCardReveal();
+  }
+
+  /// Whether the player currently revealing still uses a placeholder name.
+  bool get currentNameIsPlaceholder =>
+      currentRevealPlayer.name == 'Speler ${currentRevealPlayer.id + 1}';
+
+  /// Store the name entered by the player currently revealing their card.
+  void setCurrentRevealName(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isNotEmpty) currentRevealPlayer.name = trimmed;
+    notifyListeners();
+  }
+
+  /// Replace everyone's word, keeping the same roles (the "Woorden" action in
+  /// the describe phase). Players keep their alive/eliminated state.
+  void regenerateWord() {
+    final pool = settings.useCustomWords && customWords.isNotEmpty
+        ? customWords
+        : WordRepository.instance.pairsFor(settings.category);
+    _wordPair = pool.isEmpty
+        ? const WordPair('Appel', 'Peer')
+        : pool[_rng.nextInt(pool.length)];
+    for (final p in players) {
+      p.word = switch (p.role) {
+        Role.burger => _wordPair.burger,
+        Role.undercover => _wordPair.undercover,
+        Role.misterWhite => null,
+      };
+    }
+    notifyListeners();
+  }
+
+  /// Add a player mid-game as a Burger with the current word. Returns the new
+  /// player so the UI can show their card.
+  Player addPlayerMidGame(String name) {
+    final p = Player(
+      id: players.length,
+      name: name.trim().isEmpty ? 'Speler ${players.length + 1}' : name.trim(),
+    );
+    p.role = Role.burger;
+    p.word = _wordPair.burger;
+    p.isEliminated = false;
+    players.add(p);
+    notifyListeners();
+    return p;
+  }
+
   void _assignRolesAndWord() {
     // Roles
     final shuffled = [...players]..shuffle(_rng);
