@@ -2,7 +2,7 @@
 # rejects PNGs with transparency). Rewrites each file as 24-bit RGB in place.
 Add-Type -AssemblyName System.Drawing
 
-Get-ChildItem "$PSScriptRoot\appstore\*.png" | ForEach-Object {
+Get-ChildItem "$PSScriptRoot\appstore\*.png", "$PSScriptRoot\appstore_ipad\*.png" | ForEach-Object {
     $img = [System.Drawing.Bitmap]::FromFile($_.FullName)
     $flat = New-Object System.Drawing.Bitmap($img.Width, $img.Height, [System.Drawing.Imaging.PixelFormat]::Format24bppRgb)
     $gfx = [System.Drawing.Graphics]::FromImage($flat)
