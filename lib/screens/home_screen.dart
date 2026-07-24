@@ -80,7 +80,7 @@ class HomeScreen extends StatelessWidget {
             _BottomNav(),
             const SizedBox(height: 8),
             Text(
-              'Versie 1.0.3 • Meneer Wit - Door Alex Lamper',
+              'Versie 1.0.4 • Meneer Wit - Door Alex Lamper',
               style: TextStyle(
                 fontSize: 11,
                 color: context.palette.mutedForeground.withValues(alpha: 0.7),

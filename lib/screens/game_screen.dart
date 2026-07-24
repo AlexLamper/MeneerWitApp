@@ -861,7 +861,7 @@ class _SettingsDialog extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            'VERSIE 1.0.3 • MENEER WIT - DOOR ALEX LAMPER',
+            'VERSIE 1.0.4 • MENEER WIT - DOOR ALEX LAMPER',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 10.5,
