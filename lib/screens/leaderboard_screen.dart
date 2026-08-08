@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/leaderboard_entry.dart';
 import '../storage/app_storage.dart';
+import '../theme.dart';
 import '../widgets/common.dart';
 
 class LeaderboardScreen extends StatelessWidget {
@@ -13,39 +14,31 @@ class LeaderboardScreen extends StatelessWidget {
     final entries = context.watch<AppState>().leaderboard;
     return Scaffold(
       body: MwBackground(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+        // `flex flex-col h-full p-6`
+        padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                MwCircleButton(
-                  icon: Icons.arrow_back,
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Ranglijst',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
-                  ),
-                ),
-                if (entries.isNotEmpty) ...[
+            MwHeader(
+              title: 'Ranglijst',
+              fontSize: 30,
+              onBack: () => Navigator.of(context).pop(),
+              actions: [
+                if (entries.isNotEmpty)
                   MwCircleButton(
                     tooltip: 'Wissen',
                     icon: Icons.delete_outline,
                     onPressed: () => _confirmClear(context),
                   ),
-                  const SizedBox(width: 10),
-                ],
                 const ThemeToggleCircle(),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 32),
             Expanded(
               child: entries.isEmpty
                   ? const _Empty()
                   : ListView.separated(
+                      padding: const EdgeInsets.only(right: 8),
                       itemCount: entries.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 12),
                       itemBuilder: (context, i) =>
@@ -70,23 +63,26 @@ class LeaderboardScreen extends StatelessWidget {
   }
 }
 
+/// `text-center text-muted-foreground mt-20`
 class _Empty extends StatelessWidget {
   const _Empty();
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    final p = context.palette;
+    return Padding(
+      padding: const EdgeInsets.only(top: 80),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('🏆', style: TextStyle(fontSize: 64)),
+          const Text('🏆', style: TextStyle(fontSize: 60, height: 1)),
           const SizedBox(height: 16),
-          const Text('Nog geen scores.',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 6),
+          Text('Nog geen scores.',
+              style: MwText.t(16, color: p.mutedForeground)),
           Text(
             'Speel een spel om op het bord te komen!',
-            style: TextStyle(color: context.palette.mutedForeground),
+            textAlign: TextAlign.center,
+            style: MwText.t(14, color: p.mutedForeground),
           ),
         ],
       ),
@@ -94,6 +90,7 @@ class _Empty extends StatelessWidget {
   }
 }
 
+/// `relative overflow-hidden flex flex-col py-7 px-5 rounded-3xl border`
 class _EntryTile extends StatelessWidget {
   const _EntryTile({required this.rank, required this.entry});
 
@@ -102,144 +99,234 @@ class _EntryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final medal = switch (rank) {
-      1 => context.palette.gold,
-      2 => context.palette.silver,
-      3 => context.palette.bronze,
+    final p = context.palette;
+    final podium = switch (rank) {
+      1 => MwPalette.yellow500,
+      2 => MwPalette.slate400,
+      3 => MwPalette.bronze,
       _ => null,
     };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      decoration: BoxDecoration(
-        color: context.palette.card,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: medal?.withValues(alpha: 0.5) ?? context.palette.border,
+    // `bg-gradient-to-br from-<c>/10 to-<c2>/5`
+    final gradient = switch (rank) {
+      1 => [
+          MwPalette.yellow500.withValues(alpha: 0.10),
+          MwPalette.yellow600.withValues(alpha: 0.05),
+        ],
+      2 => [
+          MwPalette.slate300.withValues(alpha: 0.10),
+          MwPalette.slate400.withValues(alpha: 0.05),
+        ],
+      3 => [
+          MwPalette.bronze.withValues(alpha: 0.10),
+          MwPalette.bronze.withValues(alpha: 0.05),
+        ],
+      _ => null,
+    };
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(MwRadius.x3),
+      child: Container(
+        decoration: BoxDecoration(
+          color: gradient == null ? p.card : null,
+          gradient: gradient == null
+              ? null
+              : LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: gradient,
+                ),
+          borderRadius: BorderRadius.circular(MwRadius.x3),
+          border: Border.all(
+            color: podium?.withValues(alpha: 0.3) ?? p.border,
+          ),
         ),
-      ),
-      child: Stack(
-        children: [
-          // Ghost rank watermark.
-          Positioned(
-            right: 2,
-            top: -6,
-            child: Text(
-              '$rank',
-              style: TextStyle(
-                fontSize: 44,
-                fontWeight: FontWeight.w900,
-                color: context.scheme.onSurface.withValues(alpha: 0.06),
+        child: Stack(
+          children: [
+            // `absolute -top-2 -right-2 w-16 h-16 opacity-10` watermark.
+            Positioned(
+              top: -8,
+              right: -8,
+              width: 64,
+              height: 64,
+              child: Opacity(
+                opacity: 0.1,
+                child: Text(
+                  '$rank',
+                  style: MwText.t(60, weight: MwText.black)
+                      .copyWith(fontStyle: FontStyle.italic, height: 1),
+                ),
               ),
             ),
-          ),
-          Row(
-            children: [
-              // Rounded-square rank badge.
-              Container(
-                width: 44,
-                height: 44,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: medal ?? context.palette.muted,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '#$rank',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 14,
-                    color: medal != null
-                        ? Colors.black
-                        : context.palette.mutedForeground,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      // `w-12 h-12 rounded-2xl … text-2xl`
+                      Container(
+                        width: 48,
+                        height: 48,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: podium ?? p.secondary,
+                          borderRadius: BorderRadius.circular(MwRadius.x2),
+                        ),
+                        child: Text(
+                          '#$rank',
+                          style: MwText.t(
+                            24,
+                            color: podium != null
+                                ? Colors.white
+                                : p.mutedForeground,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              entry.name,
+                              overflow: TextOverflow.ellipsis,
+                              style: MwText.t(20,
+                                  weight: MwText.black, tracking: -0.025),
+                            ),
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                _Stat(
+                                  dot: p.primary.withValues(alpha: 0.4),
+                                  text: '${entry.gamesPlayed} games',
+                                ),
+                                const SizedBox(width: 12),
+                                _Stat(
+                                  dot: MwPalette.green500
+                                      .withValues(alpha: 0.4),
+                                  text: '${entry.wins} wins',
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${entry.score}',
+                            style: MwText.t(
+                              30,
+                              weight: MwText.black,
+                              tracking: -0.05,
+                              color: rank < 4 ? p.primary : p.foreground,
+                            ),
+                          ),
+                          Transform.translate(
+                            offset: const Offset(0, -4),
+                            child: Text(
+                              'PUNTEN',
+                              style: MwText.t(
+                                9,
+                                weight: MwText.black,
+                                tracking: 0.2,
+                                color:
+                                    p.mutedForeground.withValues(alpha: 0.6),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      entry.name,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w800, fontSize: 16),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        _StatDot(color: context.palette.mutedForeground),
-                        const SizedBox(width: 5),
-                        _StatText('${entry.gamesPlayed} games'),
-                        const SizedBox(width: 12),
-                        const _StatDot(color: Color(0xFF22C55E)),
-                        const SizedBox(width: 5),
-                        _StatText('${entry.wins} wins'),
-                      ],
+                  if (entry.misterWhiteGuessWins > 0) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.only(top: 16),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          top: BorderSide(
+                              color: p.border.withValues(alpha: 0.4)),
+                        ),
+                      ),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: p.primary.withValues(alpha: 0.05),
+                            borderRadius:
+                                BorderRadius.circular(MwRadius.full),
+                            border: Border.all(
+                                color: p.primary.withValues(alpha: 0.1)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('🧠',
+                                  style: TextStyle(fontSize: 12, height: 1)),
+                              const SizedBox(width: 6),
+                              Text(
+                                '${entry.misterWhiteGuessWins}X MEESTERBREIN',
+                                style: MwText.t(
+                                  10,
+                                  weight: MwText.black,
+                                  tracking: 0.05,
+                                  color: p.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                   ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    '${entry.score}',
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w900,
-                      color: context.scheme.primary,
-                    ),
-                  ),
-                  Text(
-                    'PUNTEN',
-                    style: TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1,
-                      color: context.palette.mutedForeground,
-                    ),
-                  ),
                 ],
               ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _StatDot extends StatelessWidget {
-  const _StatDot({required this.color});
+/// `flex items-center gap-1 text-[10px] font-bold text-muted-foreground
+/// uppercase tracking-wider` with a `w-1 h-1 rounded-full` dot.
+class _Stat extends StatelessWidget {
+  const _Stat({required this.dot, required this.text});
 
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 6,
-      height: 6,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-    );
-  }
-}
-
-class _StatText extends StatelessWidget {
-  const _StatText(this.text);
-
+  final Color dot;
   final String text;
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      text.toUpperCase(),
-      style: TextStyle(
-        fontSize: 10.5,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.4,
-        color: context.palette.mutedForeground,
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 4,
+          height: 4,
+          decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          text.toUpperCase(),
+          style: MwText.t(
+            10,
+            weight: MwText.bold,
+            tracking: 0.05,
+            color: context.palette.mutedForeground,
+          ),
+        ),
+      ],
     );
   }
 }

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../theme.dart';
 import '../widgets/common.dart';
 
+/// "Uitleg" — mirrors the onboarding modal on meneerwit.com.
 class ExplanationScreen extends StatelessWidget {
   const ExplanationScreen({super.key});
 
@@ -30,56 +32,86 @@ class ExplanationScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     return Scaffold(
-      appBar: AppBar(title: const Text('Uitleg')),
       body: MwBackground(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-        child: ListView.separated(
-          itemCount: _steps.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 12),
-          itemBuilder: (context, i) {
-            final (title, body) = _steps[i];
-            return Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    CircleAvatar(
-                      backgroundColor: context.scheme.primary,
-                      foregroundColor: context.scheme.onPrimary,
-                      child: Text(
-                        '${i + 1}',
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            MwHeader(
+              title: 'Uitleg',
+              fontSize: 24,
+              onBack: () => Navigator.of(context).pop(),
+              actions: const [ThemeToggleCircle()],
+            ),
+            const SizedBox(height: 24),
+            Expanded(
+              child: ListView.separated(
+                padding: const EdgeInsets.only(right: 4),
+                itemCount: _steps.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 16),
+                itemBuilder: (context, i) {
+                  final (title, body) = _steps[i];
+                  // `bg-secondary p-3 rounded-xl`
+                  return Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: p.secondary,
+                      borderRadius: BorderRadius.circular(MwRadius.xl),
                     ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            style: const TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.w800),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 32,
+                          height: 32,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: p.primary,
+                            shape: BoxShape.circle,
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            body,
-                            style: TextStyle(
-                              fontSize: 14,
-                              height: 1.45,
-                              color: context.palette.mutedForeground,
-                            ),
+                          child: Text(
+                            '${i + 1}',
+                            style: MwText.t(14,
+                                weight: MwText.bold,
+                                color: p.primaryForeground),
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                title,
+                                style: MwText.t(16,
+                                    weight: MwText.bold,
+                                    color: p.secondaryForeground),
+                              ),
+                              Text(
+                                body,
+                                style:
+                                    MwText.t(14, color: p.mutedForeground),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  );
+                },
               ),
-            );
-          },
+            ),
+            const SizedBox(height: 8),
+            MwButton(
+              label: 'Begrepen!',
+              height: 48,
+              fontSize: 16,
+              onTap: () => Navigator.of(context).pop(),
+            ),
+          ],
         ),
       ),
     );

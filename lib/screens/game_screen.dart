@@ -6,13 +6,8 @@ import 'package:provider/provider.dart';
 
 import '../game/game_controller.dart';
 import '../models/game_models.dart';
+import '../theme.dart';
 import '../widgets/common.dart';
-
-Color roleColor(BuildContext context, Role role) => switch (role) {
-      Role.burger => context.scheme.primary,
-      Role.undercover => const Color(0xFFF59E0B),
-      Role.misterWhite => context.palette.mutedForeground,
-    };
 
 class GameScreen extends StatelessWidget {
   const GameScreen({super.key});
@@ -30,9 +25,16 @@ class GameScreen extends StatelessWidget {
             }
           },
           child: Scaffold(
-            body: MwBackground(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-              child: _buildPhase(context, game),
+            body: Stack(
+              fit: StackFit.expand,
+              children: [
+                MwBackground(
+                  padding: EdgeInsets.zero,
+                  child: _buildPhase(context, game),
+                ),
+                // `fixed top-4 right-4 z-50 flex gap-2 items-center`
+                const Positioned(top: 16, right: 16, child: _TopControls()),
+              ],
             ),
           ),
         );
@@ -52,37 +54,45 @@ class GameScreen extends StatelessWidget {
   }
 }
 
-/// Top bar with theme toggle and a quit button, used on in-game screens.
-class _GameTopBar extends StatelessWidget {
-  const _GameTopBar({this.title});
-
-  final String? title;
+/// Theme switch + quit, pinned to the top-right like the site's controls.
+class _TopControls extends StatelessWidget {
+  const _TopControls();
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        if (title != null)
-          Expanded(
-            child: Text(
-              title!,
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
-            ),
-          )
-        else
-          const Spacer(),
-        const ThemeToggleCircle(),
-        const SizedBox(width: 10),
-        MwCircleButton(
-          tooltip: 'Spel stoppen',
-          icon: Icons.logout,
-          onPressed: () async {
-            if (await confirmQuitGame(context) && context.mounted) {
-              Navigator.of(context).popUntil((r) => r.isFirst);
-            }
-          },
-        ),
-      ],
+    return SafeArea(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const ThemeToggleCircle(),
+          const SizedBox(width: 8),
+          MwCircleButton(
+            tooltip: 'Spel stoppen',
+            icon: Icons.logout,
+            onPressed: () async {
+              if (await confirmQuitGame(context) && context.mounted) {
+                Navigator.of(context).popUntil((r) => r.isFirst);
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// `h2 text-2xl font-black mb-2 bg-clip-text … from-foreground to-foreground/60`
+class _PhaseTitle extends StatelessWidget {
+  const _PhaseTitle(this.text, {this.fontSize = 24});
+
+  final String text;
+  final double fontSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return MwGradientText(
+      text,
+      style: MwText.t(fontSize, weight: MwText.black),
     );
   }
 }
@@ -107,7 +117,9 @@ class _CardRevealViewState extends State<_CardRevealView> {
   void initState() {
     super.initState();
     final game = context.read<GameController>();
-    if (!game.currentNameIsPlaceholder) _nameCtrl.text = game.currentRevealPlayer.name;
+    if (!game.currentNameIsPlaceholder) {
+      _nameCtrl.text = game.currentRevealPlayer.name;
+    }
   }
 
   @override
@@ -119,61 +131,79 @@ class _CardRevealViewState extends State<_CardRevealView> {
   @override
   Widget build(BuildContext context) {
     final game = context.read<GameController>();
-    return Column(
-      children: [
-        const _GameTopBar(),
-        Expanded(
-          child: _stage == _RevealStage.name
-              ? _nameEntry(context, game)
-              : _CardStage(
-                  onDone: () {
-                    game.nextReveal();
-                  },
-                ),
-        ),
-      ],
+    // `flex flex-col h-full p-4 items-center justify-center text-center`
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: _stage == _RevealStage.name
+          ? _nameEntry(context, game)
+          : _CardStage(onDone: game.nextReveal),
     );
   }
 
   Widget _nameEntry(BuildContext context, GameController game) {
+    final p = context.palette;
     final index = game.revealIndex;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Spacer(flex: 3),
-        Text(
-          'Geef de telefoon aan',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-            color: context.palette.mutedForeground,
+    return Center(
+      child: SingleChildScrollView(
+        child: ConstrainedBox(
+          // `w-full max-w-xs`
+          constraints: const BoxConstraints(maxWidth: 320),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const _PhaseTitle('Geef de telefoon aan', fontSize: 20),
+              const SizedBox(height: 8),
+              Text(
+                'Speler ${index + 1}',
+                style: MwText.t(30, weight: MwText.black),
+              ),
+              const SizedBox(height: 24),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: EdgeInsets.only(left: 4),
+                  child: SectionLabel('Voer je naam in'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              // `w-full p-3 bg-secondary rounded-2xl text-center font-bold
+              //  text-lg border-2 border-border focus:border-primary`
+              TextField(
+                controller: _nameCtrl,
+                textAlign: TextAlign.center,
+                textInputAction: TextInputAction.done,
+                style: MwText.t(18, weight: MwText.bold, color: p.foreground),
+                decoration: InputDecoration(
+                  hintText: 'Je naam...',
+                  hintStyle:
+                      MwText.t(18, weight: MwText.bold, color: p.mutedForeground),
+                  contentPadding: const EdgeInsets.all(12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(MwRadius.x2),
+                    borderSide: BorderSide(color: p.border, width: 2),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(MwRadius.x2),
+                    borderSide: BorderSide(color: p.border, width: 2),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(MwRadius.x2),
+                    borderSide: BorderSide(color: p.primary, width: 2),
+                  ),
+                ),
+                onSubmitted: (_) => _confirmName(game),
+              ),
+              const SizedBox(height: 24),
+              MwButton(
+                label: 'Bekijk kaart',
+                height: 52,
+                onTap: () => _confirmName(game),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 6),
-        Text(
-          'Speler ${index + 1}',
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w900),
-        ),
-        const SizedBox(height: 28),
-        const SectionLabel('Voer je naam in'),
-        const SizedBox(height: 8),
-        TextField(
-          controller: _nameCtrl,
-          textAlign: TextAlign.center,
-          textInputAction: TextInputAction.done,
-          decoration: const InputDecoration(hintText: 'Je naam...'),
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-          onSubmitted: (_) => _confirmName(game),
-        ),
-        const SizedBox(height: 14),
-        ElevatedButton(
-          onPressed: () => _confirmName(game),
-          child: const Text('Bekijk kaart'),
-        ),
-        const Spacer(flex: 4),
-      ],
+      ),
     );
   }
 
@@ -195,9 +225,10 @@ class _CardStage extends StatefulWidget {
 
 class _CardStageState extends State<_CardStage>
     with SingleTickerProviderStateMixin {
+  // `transition-transform duration-700`
   late final AnimationController _flip = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 600),
+    duration: const Duration(milliseconds: 700),
   );
 
   bool get _revealed => _flip.value > 0.5;
@@ -214,101 +245,63 @@ class _CardStageState extends State<_CardStage>
     final player = game.currentRevealPlayer;
     final total = game.players.length;
 
-    return Column(
-      children: [
-        const SizedBox(height: 12),
-        Text(
-          'KAART ${game.revealIndex + 1} / $total',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.5,
-            color: context.scheme.primary,
-          ),
-        ),
-        const Spacer(),
-        GestureDetector(
-          onTap: () {
-            if (_flip.isAnimating) return;
-            if (_revealed) return;
-            _flip.forward();
-          },
-          child: AnimatedBuilder(
-            animation: _flip,
-            builder: (context, _) {
-              final angle = _flip.value * pi;
-              final showBack = _flip.value > 0.5;
-              return Transform(
-                alignment: Alignment.center,
-                transform: Matrix4.identity()
-                  ..setEntry(3, 2, 0.001)
-                  ..rotateY(angle),
-                child: showBack
-                    ? Transform(
-                        alignment: Alignment.center,
-                        transform: Matrix4.identity()..rotateY(pi),
-                        child: _CardBack(player: player, hint: game.misterWhiteHint),
-                      )
-                    : const _CardFront(),
-              );
-            },
-          ),
-        ),
-        const Spacer(),
-        AnimatedBuilder(
-          animation: _flip,
-          builder: (context, child) =>
-              Opacity(opacity: _flip.isCompleted ? 1 : 0, child: child),
-          child: ElevatedButton.icon(
-            icon: const Icon(Icons.visibility_off_outlined),
-            label: Text(
-              game.isLastReveal ? 'Verberg & start ronde' : 'Verberg & geef door',
-            ),
-            onPressed: () => widget.onDone(),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _CardFront extends StatelessWidget {
-  const _CardFront();
-
-  @override
-  Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: 0.72,
-      child: Card(
-        color: context.palette.card,
-        child: Padding(
-          padding: const EdgeInsets.all(24),
+    return Center(
+      child: SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 320),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                width: 88,
-                height: 88,
-                decoration: BoxDecoration(
-                  color: context.palette.muted,
-                  shape: BoxShape.circle,
+              SectionLabel('Kaart ${game.revealIndex + 1} / $total'),
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: () {
+                  if (_flip.isAnimating || _revealed) return;
+                  _flip.forward();
+                },
+                child: AnimatedBuilder(
+                  animation: _flip,
+                  builder: (context, _) {
+                    final angle = _flip.value * pi;
+                    final showBack = _flip.value > 0.5;
+                    return Transform(
+                      alignment: Alignment.center,
+                      transform: Matrix4.identity()
+                        ..setEntry(3, 2, 0.001)
+                        ..rotateY(angle),
+                      child: showBack
+                          ? Transform(
+                              alignment: Alignment.center,
+                              transform: Matrix4.identity()..rotateY(pi),
+                              child: _CardBack(
+                                  player: player, hint: game.misterWhiteHint),
+                            )
+                          : const _CardFront(),
+                    );
+                  },
                 ),
-                child: Icon(Icons.question_mark_rounded,
-                    size: 44, color: context.scheme.onSurface),
               ),
-              const SizedBox(height: 24),
-              const Text(
-                'Tik om te onthullen',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Zorg dat niemand meekijkt!',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: context.palette.mutedForeground,
+              // `mb-8` between the card and the button.
+              const SizedBox(height: 32),
+              AnimatedBuilder(
+                animation: _flip,
+                builder: (context, child) => IgnorePointer(
+                  ignoring: !_flip.isCompleted,
+                  child: Opacity(
+                    opacity: _flip.isCompleted ? 1 : 0,
+                    child: child,
+                  ),
+                ),
+                // `w-full py-4 bg-secondary rounded-2xl font-bold text-lg
+                //  border-2 border-border`
+                child: MwButton(
+                  label: game.isLastReveal
+                      ? 'Verberg & start ronde'
+                      : 'Verberg & geef door',
+                  variant: MwButtonVariant.secondary,
+                  bordered: true,
+                  onTap: widget.onDone,
                 ),
               ),
             ],
@@ -319,6 +312,66 @@ class _CardFront extends StatelessWidget {
   }
 }
 
+/// `aspect-3/4 rounded-[2.5rem] shadow-2xl border-2 border-border/60
+/// bg-gradient-to-br from-slate-100 to-slate-200 (dark: zinc-800 → zinc-900)`
+class _CardFront extends StatelessWidget {
+  const _CardFront();
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return AspectRatio(
+      aspectRatio: 3 / 4,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [p.cardFaceFrom, p.cardFaceTo],
+          ),
+          borderRadius: BorderRadius.circular(MwRadius.modal),
+          border: Border.all(color: p.border.withValues(alpha: 0.6), width: 2),
+          boxShadow: mwShadow2Xl(),
+        ),
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: p.foreground.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                '?',
+                style: MwText.t(36,
+                    weight: MwText.black, color: p.foreground),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Tik om te onthullen',
+              textAlign: TextAlign.center,
+              style:
+                  MwText.t(24, weight: MwText.black, color: p.foreground),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Zorg dat niemand meekijkt!',
+              textAlign: TextAlign.center,
+              style: MwText.t(14, color: p.mutedForeground),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// `bg-card rounded-[2.5rem] shadow-2xl p-8 border-2 border-border`
 class _CardBack extends StatelessWidget {
   const _CardBack({required this.player, required this.hint});
 
@@ -327,73 +380,118 @@ class _CardBack extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Always the same design — no per-role colours (matches the site).
-    final accent = context.scheme.primary;
+    final p = context.palette;
+    final isMisterWhite = player.role == Role.misterWhite;
     return AspectRatio(
-      aspectRatio: 0.72,
-      child: Card(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: context.palette.border),
+      aspectRatio: 3 / 4,
+      child: Container(
+        decoration: BoxDecoration(
+          color: p.card,
+          borderRadius: BorderRadius.circular(MwRadius.modal),
+          border: Border.all(color: p.border, width: 2),
+          boxShadow: mwShadow2Xl(),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  player.role.label,
-                  style: TextStyle(
-                      color: accent, fontWeight: FontWeight.w800, fontSize: 14),
+        clipBehavior: Clip.antiAlias,
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (isMisterWhite) ...[
+              _CardLabel('Jouw Rol'),
+              const SizedBox(height: 16),
+              Text(
+                'Mister White',
+                style: MwText.t(30,
+                    weight: MwText.black, color: p.cardForeground),
+              ),
+              const SizedBox(height: 32),
+              Container(width: 64, height: 1, color: p.border),
+              const SizedBox(height: 32),
+            ],
+            _CardLabel('Jouw Woord'),
+            const SizedBox(height: 16),
+            Text(
+              isMisterWhite ? '???' : (player.word ?? '???'),
+              textAlign: TextAlign.center,
+              style: MwText.t(
+                36,
+                weight: MwText.black,
+                tracking: -0.025,
+                color: p.cardForeground,
+              ),
+            ),
+            if (isMisterWhite) ...[
+              const SizedBox(height: 24),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 200),
+                child: Column(
+                  children: [
+                    Text(
+                      'Je hebt geen woord. Luister goed naar de hints van anderen en probeer niet op te vallen!',
+                      textAlign: TextAlign.center,
+                      style: MwText.t(10,
+                          height: 1.625, color: p.mutedForeground),
+                    ),
+                    if (hint != null) ...[
+                      const SizedBox(height: 12),
+                      // `rounded-lg border border-primary/30 bg-primary/10 px-3 py-2`
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: p.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(MwRadius.lg),
+                          border: Border.all(
+                              color: p.primary.withValues(alpha: 0.3)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'HINT',
+                              style: MwText.t(9,
+                                  weight: MwText.black,
+                                  tracking: 0.05,
+                                  color: p.primary),
+                            ),
+                            Text(
+                              hint!,
+                              style: MwText.t(11,
+                                  weight: MwText.bold,
+                                  color: p.cardForeground),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              const SizedBox(height: 26),
-              if (player.word != null) ...[
-                Text(
-                  'JOUW WOORD',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.5,
-                    color: context.palette.mutedForeground,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  player.word!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 40,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -1,
-                  ),
-                ),
-              ] else ...[
-                const Icon(Icons.help_outline, size: 52),
-                const SizedBox(height: 12),
-                const Text('Geen woord',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 12),
-                Text(
-                  'Luister goed en val niet op!',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      fontSize: 13.5, color: context.palette.mutedForeground),
-                ),
-                if (hint != null) ...[
-                  const SizedBox(height: 14),
-                  InfoPill(text: hint!, icon: Icons.lightbulb_outline),
-                ],
-              ],
             ],
-          ),
+          ],
         ),
+      ),
+    );
+  }
+}
+
+/// `text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground`
+class _CardLabel extends StatelessWidget {
+  const _CardLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text.toUpperCase(),
+      style: MwText.t(
+        12,
+        weight: MwText.bold,
+        tracking: 0.2,
+        color: context.palette.mutedForeground,
       ),
     );
   }
@@ -414,70 +512,78 @@ class _DescribeViewState extends State<_DescribeView> {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     final game = context.read<GameController>();
     final order = game.hintOrder;
     final starter = game.startingPlayer ?? order.first;
-    // Map player id -> turn number (1-based) in the hint order.
     final turnOf = {for (var i = 0; i < order.length; i++) order[i].id: i + 1};
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _GameTopBar(title: 'Omschrijf-fase'),
-        const SizedBox(height: 6),
-        Text(
-          _peek
-              ? 'Selecteer je eigen kaart om je woord te zien.'
-              : 'Beschrijf je woord nu met één woord of zin, in de volgorde van de nummers!',
-          style: TextStyle(
-            fontSize: 14,
-            height: 1.4,
-            color: context.palette.mutedForeground,
+    // `flex flex-col h-full p-4 pt-8 overflow-hidden`
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 32, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _PhaseTitle('Omschrijf-fase'),
+          const SizedBox(height: 8),
+          Text(
+            _peek
+                ? 'Selecteer je eigen kaart om je woord te zien.'
+                : 'Beschrijf je woord nu met één woord of zin, in de volgorde van de nummers!',
+            style: MwText.t(14, color: p.mutedForeground),
           ),
-        ),
-        const SizedBox(height: 14),
-        if (!_peek) _TurnOrderCard(order: order, starter: starter),
-        const SizedBox(height: 14),
-        Expanded(
-          child: GridView.count(
-            crossAxisCount: 2,
-            childAspectRatio: 1.9,
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            children: [
-              // Display order matches the actual turn order.
-              for (final p in order)
-                _DescribePlayerCard(
-                  player: p,
-                  turn: turnOf[p.id] ?? 0,
-                  isStarter: p.id == starter.id,
-                  peek: _peek,
-                  onTap: _peek ? () => _showWord(context, p) : null,
-                ),
-            ],
+          const SizedBox(height: 16),
+          if (!_peek) ...[
+            _TurnOrderCard(order: order, starter: starter),
+            const SizedBox(height: 16),
+          ],
+          Expanded(
+            child: GridView(
+              clipBehavior: Clip.none,
+              padding: const EdgeInsets.fromLTRB(8, 16, 16, 0),
+              gridDelegate:
+                  const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+                mainAxisExtent: 64,
+              ),
+              children: [
+                for (final pl in order)
+                  _DescribePlayerCard(
+                    player: pl,
+                    turn: turnOf[pl.id] ?? 0,
+                    isStarter: pl.id == starter.id,
+                    peek: _peek,
+                    onTap: _peek ? () => _showWord(context, pl) : null,
+                  ),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 10),
-        ElevatedButton.icon(
-          icon: const Icon(Icons.how_to_vote_outlined),
-          label: const Text('Ga naar stemmen'),
-          onPressed: game.startVoting,
-        ),
-        const SizedBox(height: 12),
-        _Toolbar(
-          peek: _peek,
-          onWoorden: () => _newWords(context, game),
-          onOpties: () => _openSettings(context),
-          onSpelerPlus: () => _addPlayer(context, game),
-          onBekijk: () => setState(() => _peek = !_peek),
-        ),
-      ],
+          const SizedBox(height: 16),
+          // `w-full py-4 bg-primary rounded-2xl font-bold text-xl`
+          MwButton(
+            label: 'Ga naar stemmen',
+            icon: Icons.chevron_right,
+            fontSize: 20,
+            onTap: game.startVoting,
+          ),
+          const SizedBox(height: 16),
+          _Toolbar(
+            peek: _peek,
+            onWoorden: () => _newWords(context, game),
+            onOpties: () => _openSettings(context),
+            onSpelerPlus: () => _addPlayer(context, game),
+            onBekijk: () => setState(() => _peek = !_peek),
+          ),
+        ],
+      ),
     );
   }
 
   void _showWord(BuildContext context, Player p) {
-    showDialog(
-      context: context,
+    showMwDialog(
+      context,
       builder: (context) => MwDialog(
         title: p.name,
         message: p.word == null
@@ -486,6 +592,7 @@ class _DescribeViewState extends State<_DescribeView> {
         actions: [
           MwDialogButton(
             label: 'Sluiten',
+            variant: MwButtonVariant.secondary,
             onTap: () => Navigator.pop(context),
           ),
         ],
@@ -504,19 +611,21 @@ class _DescribeViewState extends State<_DescribeView> {
   }
 
   void _openSettings(BuildContext context) {
-    showDialog(context: context, builder: (_) => const _SettingsDialog());
+    showMwDialog(context, builder: (_) => const _SettingsDialog());
   }
 
   Future<void> _addPlayer(BuildContext context, GameController game) async {
     final ctrl = TextEditingController();
-    final name = await showDialog<String>(
-      context: context,
+    final name = await showMwDialog<String>(
+      context,
       builder: (context) => MwDialog(
         title: 'Speler toevoegen',
         content: TextField(
           controller: ctrl,
           autofocus: true,
           textAlign: TextAlign.center,
+          style: MwText.t(18,
+              weight: MwText.bold, color: context.palette.foreground),
           decoration: const InputDecoration(hintText: 'Naam van speler'),
           onSubmitted: (v) => Navigator.pop(context, v),
         ),
@@ -527,7 +636,7 @@ class _DescribeViewState extends State<_DescribeView> {
           ),
           MwDialogButton(
             label: 'Annuleren',
-            variant: MwButtonVariant.muted,
+            variant: MwButtonVariant.secondary,
             onTap: () => Navigator.pop(context),
           ),
         ],
@@ -542,6 +651,7 @@ class _DescribeViewState extends State<_DescribeView> {
   }
 }
 
+/// `p-3 rounded-2xl border border-primary/30 bg-primary/10`
 class _TurnOrderCard extends StatelessWidget {
   const _TurnOrderCard({required this.order, required this.starter});
 
@@ -550,64 +660,65 @@ class _TurnOrderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'BEURTVOLGORDE',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
-                color: context.scheme.primary,
-              ),
-            ),
-            const SizedBox(height: 6),
-            RichText(
-              text: TextSpan(
-                style: TextStyle(
-                  fontSize: 13.5,
-                  color: context.scheme.onSurface,
+    final p = context.palette;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: p.primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(MwRadius.x2),
+        border: Border.all(color: p.primary.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'BEURTVOLGORDE',
+            style: MwText.t(10,
+                weight: MwText.black, tracking: 0.1, color: p.primary),
+          ),
+          const SizedBox(height: 8),
+          Text.rich(
+            TextSpan(
+              style: MwText.t(12,
+                  weight: MwText.semibold, color: p.foreground),
+              children: [
+                TextSpan(
+                  text: 'Start bij ${starter.name}',
+                  style: MwText.t(12,
+                      weight: MwText.black, color: p.foreground),
                 ),
-                children: [
-                  const TextSpan(text: 'Start bij '),
-                  TextSpan(
-                    text: starter.name,
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const TextSpan(text: ' en ga daarna verder volgens de nummers.'),
-                ],
-              ),
+                const TextSpan(
+                    text: ' en ga daarna verder volgens de nummers.'),
+              ],
             ),
-            const SizedBox(height: 10),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (var i = 0; i < order.length; i++) ...[
-                    _OrderChip(
-                      number: i + 1,
-                      name: order[i].name,
-                      highlight: i == 0,
-                    ),
-                    if (i < order.length - 1) const SizedBox(width: 8),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (var i = 0; i < order.length; i++)
+                _OrderChip(
+                  number: i + 1,
+                  name: order[i].name,
+                  highlight: i == 0,
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }
 }
 
+/// `inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px]
+/// font-bold border`
 class _OrderChip extends StatelessWidget {
-  const _OrderChip(
-      {required this.number, required this.name, required this.highlight});
+  const _OrderChip({
+    required this.number,
+    required this.name,
+    required this.highlight,
+  });
 
   final int number;
   final String name;
@@ -615,40 +726,38 @@ class _OrderChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
+    final fg = highlight ? p.primaryForeground : p.foreground;
     return Container(
-      padding: const EdgeInsets.fromLTRB(6, 5, 12, 5),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: highlight
-            ? context.scheme.primary.withValues(alpha: 0.18)
-            : context.palette.muted,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: highlight ? context.scheme.primary : context.palette.border,
-        ),
+        color: highlight ? p.primary : p.card,
+        borderRadius: BorderRadius.circular(MwRadius.full),
+        border: Border.all(color: highlight ? p.primary : p.border),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CircleAvatar(
-            radius: 11,
-            backgroundColor:
-                highlight ? context.scheme.primary : context.palette.border,
-            foregroundColor:
-                highlight ? context.scheme.onPrimary : context.scheme.onSurface,
+          Container(
+            width: 20,
+            height: 20,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: highlight
+                  ? p.primaryForeground.withValues(alpha: 0.2)
+                  : p.secondary,
+              shape: BoxShape.circle,
+            ),
             child: Text('$number',
-                style:
-                    const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+                style: MwText.t(10, weight: MwText.bold, color: fg)),
           ),
           const SizedBox(width: 8),
-          Text(name,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+          Text(name, style: MwText.t(10, weight: MwText.bold, color: fg)),
           if (highlight) ...[
             const SizedBox(width: 8),
             Text('START',
-                style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    color: context.scheme.primary)),
+                style: MwText.t(10,
+                    weight: MwText.bold, tracking: 0.025, color: fg)),
           ],
         ],
       ),
@@ -656,6 +765,7 @@ class _OrderChip extends StatelessWidget {
   }
 }
 
+/// `pl-2 pr-2 py-3 rounded-xl border-2 … flex flex-row items-center text-left`
 class _DescribePlayerCard extends StatelessWidget {
   const _DescribePlayerCard({
     required this.player,
@@ -673,32 +783,39 @@ class _DescribePlayerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     final highlight = peek || isStarter;
     return Stack(
+      clipBehavior: Clip.none,
       children: [
         Material(
-          color: context.palette.card,
+          color: p.card,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(MwRadius.xl),
             side: BorderSide(
-              color: highlight ? context.scheme.primary : context.palette.border,
-              width: highlight ? 1.8 : 1,
+              color: highlight ? p.primary : p.border,
+              width: 2,
             ),
           ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: onTap,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 28, 12),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 16,
-                    backgroundColor: context.palette.muted,
+                  Container(
+                    width: 32,
+                    height: 32,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: p.secondary,
+                      shape: BoxShape.circle,
+                    ),
                     child: Icon(Icons.person_outline,
-                        size: 18, color: context.palette.mutedForeground),
+                        size: 20, color: p.mutedForeground),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -707,19 +824,17 @@ class _DescribePlayerCard extends StatelessWidget {
                         Text(
                           player.name,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w800, fontSize: 14),
+                          style: MwText.t(14,
+                              weight: MwText.bold,
+                              height: 1.25,
+                              color: p.cardForeground),
                         ),
                         Text(
-                          isStarter ? 'START SPELER' : 'ACTIEF',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.5,
-                            color: isStarter
-                                ? context.scheme.primary
-                                : context.palette.mutedForeground,
-                          ),
+                          (isStarter ? 'Start Speler' : 'Actief').toUpperCase(),
+                          style: MwText.t(10,
+                              weight: MwText.medium,
+                              tracking: 0.05,
+                              color: p.mutedForeground),
                         ),
                       ],
                     ),
@@ -729,16 +844,26 @@ class _DescribePlayerCard extends StatelessWidget {
             ),
           ),
         ),
+        // `absolute -top-2 -right-2 w-6 h-6 bg-primary rounded-full
+        //  text-xs font-black shadow-md border-2 border-background`
         Positioned(
-          top: 6,
-          right: 6,
-          child: CircleAvatar(
-            radius: 11,
-            backgroundColor: context.scheme.primary,
-            foregroundColor: context.scheme.onPrimary,
-            child: Text('$turn',
-                style:
-                    const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+          top: -8,
+          right: -8,
+          child: Container(
+            width: 24,
+            height: 24,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: p.primary,
+              shape: BoxShape.circle,
+              border: Border.all(color: p.background, width: 2),
+              boxShadow: mwShadowMd(),
+            ),
+            child: Text(
+              '$turn',
+              style: MwText.t(12,
+                  weight: MwText.black, color: p.primaryForeground),
+            ),
           ),
         ),
       ],
@@ -746,6 +871,7 @@ class _DescribePlayerCard extends StatelessWidget {
   }
 }
 
+/// `flex justify-between items-center gap-2 p-2 bg-secondary/50 rounded-2xl`
 class _Toolbar extends StatelessWidget {
   const _Toolbar({
     required this.peek,
@@ -763,20 +889,23 @@ class _Toolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: context.palette.card,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: context.palette.border),
+        color: p.secondary.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(MwRadius.x2),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
           _ToolItem(icon: Icons.autorenew, label: 'Woorden', onTap: onWoorden),
-          _ToolItem(icon: Icons.settings_outlined, label: 'Opties', onTap: onOpties),
+          const SizedBox(width: 8),
+          _ToolItem(
+              icon: Icons.settings_outlined, label: 'Opties', onTap: onOpties),
+          const SizedBox(width: 8),
           _ToolItem(
               icon: Icons.person_add_alt, label: 'Speler+', onTap: onSpelerPlus),
+          const SizedBox(width: 8),
           _ToolItem(
             icon: Icons.visibility_outlined,
             label: 'Bekijk',
@@ -789,6 +918,7 @@ class _Toolbar extends StatelessWidget {
   }
 }
 
+/// `flex-1 flex flex-col items-center justify-center p-2 rounded-xl`
 class _ToolItem extends StatelessWidget {
   const _ToolItem({
     required this.icon,
@@ -804,71 +934,75 @@ class _ToolItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color =
-        active ? context.scheme.primary : context.palette.mutedForeground;
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 22, color: color),
-            const SizedBox(height: 4),
-            Text(
-              label.toUpperCase(),
-              style: TextStyle(
-                fontSize: 9.5,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.5,
-                color: color,
-              ),
+    final p = context.palette;
+    final fg = active ? p.primaryForeground : p.mutedForeground;
+    return Expanded(
+      child: Material(
+        color: active ? p.primary : Colors.transparent,
+        borderRadius: BorderRadius.circular(MwRadius.xl),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(MwRadius.xl),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 24, color: fg),
+                const SizedBox(height: 4),
+                Text(
+                  label.toUpperCase(),
+                  style: MwText.t(10, weight: MwText.bold, color: fg),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// In-game settings dialog ("Instellingen").
+/// In-game settings modal ("Instellingen").
 class _SettingsDialog extends StatelessWidget {
   const _SettingsDialog();
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     return MwDialog(
       title: 'Instellingen',
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // `flex items-center justify-between p-4 bg-secondary rounded-2xl`
           Container(
-            padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: context.palette.muted,
-              borderRadius: BorderRadius.circular(14),
+              color: p.secondary,
+              borderRadius: BorderRadius.circular(MwRadius.x2),
             ),
             child: Row(
               children: [
-                const Expanded(
-                  child: Text('Thema',
-                      style: TextStyle(fontWeight: FontWeight.w700)),
+                Expanded(
+                  child: Text(
+                    'Thema',
+                    style: MwText.t(16,
+                        weight: MwText.bold, color: p.secondaryForeground),
+                  ),
                 ),
                 const ThemeToggleCircle(),
               ],
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 24),
           Text(
             'VERSIE 1.0.4 • MENEER WIT - DOOR ALEX LAMPER',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.5,
-              color: context.palette.mutedForeground,
-            ),
+            style: MwText.t(10,
+                weight: MwText.bold,
+                tracking: 0.1,
+                color: p.mutedForeground),
           ),
         ],
       ),
@@ -892,15 +1026,11 @@ class _AddedPlayerReveal extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: MwBackground(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+        padding: const EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text('${player.name} - bekijk je kaart',
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.w800)),
-            ),
+            _PhaseTitle('${player.name} - bekijk je kaart', fontSize: 20),
             Expanded(
               child: _CardStage(onDone: () => Navigator.pop(context)),
             ),
@@ -919,41 +1049,41 @@ class _VotingView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     final game = context.read<GameController>();
     final alive = game.alivePlayers;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const _GameTopBar(),
-        // Content pushed further down (top-right buttons stay put).
-        const SizedBox(height: 32),
-        const Text(
-          'Wie is verdacht?',
-          style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Klik op een speler om te stemmen. De speler met de meeste stemmen wordt geëlimineerd.',
-          style: TextStyle(
-            fontSize: 14,
-            height: 1.4,
-            color: context.palette.mutedForeground,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 32, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _PhaseTitle('Wie is verdacht?'),
+          const SizedBox(height: 8),
+          Text(
+            'Klik op een speler om te stemmen. De speler met de meeste stemmen wordt geëlimineerd.',
+            style: MwText.t(14, color: p.mutedForeground),
           ),
-        ),
-        const SizedBox(height: 20),
-        Expanded(
-          child: GridView.count(
-            crossAxisCount: 2,
-            childAspectRatio: 2.4,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            children: [
-              for (final p in alive)
-                _VoteCard(name: p.name, onTap: () => _confirm(context, game, p)),
-            ],
+          const SizedBox(height: 16),
+          Expanded(
+            child: GridView(
+              clipBehavior: Clip.none,
+              padding: const EdgeInsets.fromLTRB(8, 16, 16, 0),
+              gridDelegate:
+                  const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+                mainAxisExtent: 64,
+              ),
+              children: [
+                for (final pl in alive)
+                  _VoteCard(
+                      name: pl.name, onTap: () => _confirm(context, game, pl)),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -970,6 +1100,7 @@ class _VotingView extends StatelessWidget {
   }
 }
 
+/// `pl-2 pr-2 py-3 rounded-xl border-2 border-border bg-card shadow-sm`
 class _VoteCard extends StatelessWidget {
   const _VoteCard({required this.name, required this.onTap});
 
@@ -978,46 +1109,62 @@ class _VoteCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: context.palette.card,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: context.palette.border),
+    final p = context.palette;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(MwRadius.xl),
+        boxShadow: mwShadowSm(),
       ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: context.scheme.primary,
-                child: Icon(Icons.fingerprint,
-                    color: context.scheme.onPrimary, size: 22),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(name,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w800, fontSize: 15)),
-                    Text('STEMMEN',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.5,
-                          color: context.palette.mutedForeground,
-                        )),
-                  ],
+      child: Material(
+        color: p.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(MwRadius.xl),
+          side: BorderSide(color: p.border, width: 2),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: p.primary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.fingerprint,
+                      size: 20, color: p.primaryForeground),
                 ),
-              ),
-            ],
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        name,
+                        overflow: TextOverflow.ellipsis,
+                        style: MwText.t(14,
+                            weight: MwText.bold,
+                            height: 1.25,
+                            color: p.cardForeground),
+                      ),
+                      Text(
+                        'STEMMEN',
+                        style: MwText.t(10,
+                            weight: MwText.medium,
+                            tracking: 0.05,
+                            color: p.mutedForeground),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1033,82 +1180,86 @@ class _EliminationView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.palette;
     final game = context.read<GameController>();
     final p = game.lastEliminated!;
-    final color = roleColor(context, p.role);
-    return Column(
-      children: [
-        const _GameTopBar(),
-        const Spacer(),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Center(
+        child: SingleChildScrollView(
+          // `bg-card rounded-[2.5rem] p-8 text-center shadow-2xl border`
+          child: Container(
+            decoration: BoxDecoration(
+              color: pal.card,
+              borderRadius: BorderRadius.circular(MwRadius.modal),
+              border: Border.all(color: pal.border),
+              boxShadow: mwShadow2Xl(),
+            ),
+            padding: const EdgeInsets.all(32),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
                   '${p.name} was...',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      fontSize: 26, fontWeight: FontWeight.w900),
+                  style: MwText.t(24,
+                      weight: MwText.bold, color: pal.cardForeground),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 8),
+                // `p-6 bg-secondary rounded-2xl`
                 Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 22),
+                  padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: color.withValues(alpha: 0.4)),
+                    color: pal.secondary,
+                    borderRadius: BorderRadius.circular(MwRadius.x2),
                   ),
                   child: Column(
                     children: [
-                      Text('ROL',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1.5,
-                            color: context.palette.mutedForeground,
-                          )),
-                      const SizedBox(height: 6),
+                      Text(
+                        'ROL',
+                        style: MwText.t(14,
+                            weight: MwText.bold,
+                            tracking: 0.1,
+                            color: pal.mutedForeground),
+                      ),
+                      const SizedBox(height: 8),
                       Text(
                         p.role.label,
-                        style: TextStyle(
-                          fontSize: 34,
-                          fontWeight: FontWeight.w900,
-                          color: color,
-                        ),
+                        textAlign: TextAlign.center,
+                        style: MwText.t(36,
+                            weight: MwText.black,
+                            color: pal.secondaryForeground),
                       ),
                     ],
                   ),
                 ),
                 if (game.mrWhiteGuessedWrong) ...[
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 16),
                   Text(
                     'Het woord was niet "${game.mrWhiteGuessAttempt}".',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: context.palette.mutedForeground),
+                    style: MwText.t(14, color: pal.mutedForeground),
                   ),
                 ] else if (p.word != null) ...[
-                  const SizedBox(height: 14),
-                  Text('Woord: ${p.word}',
-                      style:
-                          TextStyle(color: context.palette.mutedForeground)),
-                ],
-                const SizedBox(height: 22),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: game.resolveAfterElimination,
-                    child: const Text('Doorgaan'),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Woord: ${p.word}',
+                    textAlign: TextAlign.center,
+                    style: MwText.t(14, color: pal.mutedForeground),
                   ),
+                ],
+                const SizedBox(height: 32),
+                MwButton(
+                  label: 'Doorgaan',
+                  fontSize: 20,
+                  onTap: game.resolveAfterElimination,
                 ),
               ],
             ),
           ),
         ),
-        const Spacer(flex: 2),
-      ],
+      ),
     );
   }
 }
@@ -1134,43 +1285,108 @@ class _MrWhiteGuessViewState extends State<_MrWhiteGuessView> {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.palette;
     final game = context.read<GameController>();
     final p = game.lastEliminated!;
-    return Column(
-      children: [
-        const _GameTopBar(),
-        const Spacer(),
-        Text(
-          '${p.name} was Mister White!',
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Je kunt nog winnen! Raad het woord van de Burgers:',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 15, color: context.palette.mutedForeground),
-        ),
-        const SizedBox(height: 20),
-        TextField(
-          controller: _controller,
-          textAlign: TextAlign.center,
-          textInputAction: TextInputAction.done,
-          decoration: const InputDecoration(hintText: 'Typ het woord...'),
-          onSubmitted: (v) => game.submitMisterWhiteGuess(v),
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-        ),
-        const Spacer(),
-        ElevatedButton(
-          onPressed: () => game.submitMisterWhiteGuess(_controller.text),
-          child: const Text('Raad'),
-        ),
-        const SizedBox(height: 10),
-        TextButton(
-          onPressed: game.skipMisterWhiteGuess,
-          child: const Text('Ik weet het niet'),
-        ),
-      ],
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Stack(
+        children: [
+          // `absolute top-12 text-sm font-bold uppercase tracking-[0.3em]`
+          Positioned(
+            top: 24,
+            left: 0,
+            right: 0,
+            child: Opacity(
+              opacity: 0.5,
+              child: Text(
+                'ONTMASKERD!',
+                textAlign: TextAlign.center,
+                style: MwText.t(14,
+                    weight: MwText.bold,
+                    tracking: 0.3,
+                    color: pal.foreground),
+              ),
+            ),
+          ),
+          Center(
+            child: SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 320),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      '${p.name} was Mister White!',
+                      textAlign: TextAlign.center,
+                      style: MwText.t(48,
+                          weight: MwText.black, color: pal.foreground),
+                    ),
+                    const SizedBox(height: 16),
+                    Opacity(
+                      opacity: 0.7,
+                      child: Text(
+                        'Je kunt nog winnen! Raad het woord van de Burgers:',
+                        textAlign: TextAlign.center,
+                        style: MwText.t(20, color: pal.foreground),
+                      ),
+                    ),
+                    const SizedBox(height: 48),
+                    // `p-6 bg-secondary rounded-3xl text-center font-bold
+                    //  text-2xl border-2 border-border`
+                    TextField(
+                      controller: _controller,
+                      textAlign: TextAlign.center,
+                      textInputAction: TextInputAction.done,
+                      style: MwText.t(24,
+                          weight: MwText.bold, color: pal.foreground),
+                      decoration: InputDecoration(
+                        hintText: 'Typ het woord...',
+                        hintStyle: MwText.t(24,
+                            weight: MwText.bold, color: pal.mutedForeground),
+                        contentPadding: const EdgeInsets.all(24),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(MwRadius.x3),
+                          borderSide: BorderSide(color: pal.border, width: 2),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(MwRadius.x3),
+                          borderSide: BorderSide(color: pal.border, width: 2),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(MwRadius.x3),
+                          borderSide: BorderSide(color: pal.primary, width: 2),
+                        ),
+                      ),
+                      onSubmitted: game.submitMisterWhiteGuess,
+                    ),
+                    const SizedBox(height: 32),
+                    MwButton(
+                      label: 'Bevestig Woord',
+                      height: 68,
+                      fontSize: 20,
+                      shadows: mwShadow2Xl(),
+                      onTap: () =>
+                          game.submitMisterWhiteGuess(_controller.text),
+                    ),
+                    const SizedBox(height: 32),
+                    TextButton(
+                      onPressed: game.skipMisterWhiteGuess,
+                      child: Text(
+                        'Ik weet het niet',
+                        style: MwText.t(16,
+                            weight: MwText.bold,
+                            color: pal.mutedForeground),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1202,72 +1418,93 @@ class _GameOverViewState extends State<_GameOverView> {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     final game = context.read<GameController>();
     final winner = game.winner!;
     return Stack(
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const SizedBox(height: 56),
-            Text(
-              'EINDE SPEL',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 3,
-                color: context.palette.mutedForeground,
+        Padding(
+          // `flex flex-col h-full p-6 items-center justify-center text-center`
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'EINDE SPEL',
+                textAlign: TextAlign.center,
+                style: MwText.t(14,
+                    weight: MwText.bold,
+                    tracking: 0.3,
+                    color: p.mutedForeground),
               ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              winner.title,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 42,
-                fontWeight: FontWeight.w900,
-                height: 1.05,
-                letterSpacing: -1.5,
-                color: context.scheme.primary,
+              const SizedBox(height: 16),
+              MwGradientText(
+                winner.title,
+                textAlign: TextAlign.center,
+                style: MwText.t(48, weight: MwText.black, height: 1.25),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Het woord was "${game.wordPair.burger}"',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 15,
-                color: context.palette.mutedForeground,
+              const SizedBox(height: 8),
+              Text(
+                'Het woord was "${game.wordPair.burger}"',
+                textAlign: TextAlign.center,
+                style: MwText.t(14, color: p.mutedForeground),
               ),
-            ),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(child: SectionLabel('Speler')),
-                SectionLabel('Rol & woord'),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: ListView(
-                children: [
-                  for (final p in game.players) _ResultCard(player: p),
-                ],
+              const SizedBox(height: 32),
+              // `flex justify-between text-[10px] font-bold uppercase
+              //  tracking-widest text-muted-foreground px-4 mb-2`
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    SectionLabel('Speler'),
+                    SectionLabel('Rol & Woord'),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.refresh),
-              label: const Text('Opnieuw spelen'),
-              onPressed: game.nextRound,
-            ),
-            const SizedBox(height: 10),
-            OutlinedButton(
-              onPressed: () => Navigator.of(context).popUntil((r) => r.isFirst),
-              child: const Text('Terug naar start'),
-            ),
-          ],
+              const SizedBox(height: 8),
+              // `max-h-[40vh] overflow-y-auto pr-2`
+              Flexible(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(context).height * 0.4,
+                  ),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.only(right: 8),
+                    itemCount: game.players.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (_, i) =>
+                        _ResultCard(player: game.players[i]),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 48),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 320),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    MwButton(
+                      label: 'Opnieuw spelen',
+                      icon: Icons.chevron_right,
+                      height: 68,
+                      fontSize: 20,
+                      onTap: game.nextRound,
+                    ),
+                    const SizedBox(height: 16),
+                    MwButton(
+                      label: 'Terug naar start',
+                      variant: MwButtonVariant.secondary,
+                      onTap: () =>
+                          Navigator.of(context).popUntil((r) => r.isFirst),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
         Align(
           alignment: Alignment.topCenter,
@@ -1282,13 +1519,15 @@ class _GameOverViewState extends State<_GameOverView> {
             particleDrag: 0.05,
             minimumSize: const Size(8, 8),
             maximumSize: const Size(16, 16),
+            // `confetti` default palette used by the site.
             colors: const [
-              Color(0xFF88FF5A),
+              Color(0xFF26CCFF),
               Color(0xFFA25AFD),
-              Color(0xFFFF36FF),
               Color(0xFFFF5E7E),
-              Color(0xFF5A8CFF),
-              Color(0xFFFFD93D),
+              Color(0xFF88FF5A),
+              Color(0xFFFCFF42),
+              Color(0xFFFFA62D),
+              Color(0xFFFF36FF),
             ],
           ),
         ),
@@ -1297,6 +1536,7 @@ class _GameOverViewState extends State<_GameOverView> {
   }
 }
 
+/// `flex justify-between items-center p-4 rounded-2xl bg-secondary`
 class _ResultCard extends StatelessWidget {
   const _ResultCard({required this.player});
 
@@ -1304,55 +1544,51 @@ class _ResultCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = roleColor(context, player.role);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: context.palette.card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: context.palette.border),
-      ),
-      child: Row(
-        children: [
-          if (player.isEliminated) ...[
-            const Text('💀', style: TextStyle(fontSize: 16)),
-            const SizedBox(width: 8),
-          ],
-          Expanded(
-            child: Text(
-              player.name,
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 15,
-                decoration:
-                    player.isEliminated ? TextDecoration.lineThrough : null,
-                color: player.isEliminated
-                    ? context.palette.mutedForeground
-                    : null,
+    final p = context.palette;
+    return Opacity(
+      opacity: player.isEliminated ? 0.6 : 1,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: p.secondary,
+          borderRadius: BorderRadius.circular(MwRadius.x2),
+        ),
+        child: Row(
+          children: [
+            if (player.isEliminated) ...[
+              const Text('💀', style: TextStyle(fontSize: 12, height: 1)),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              child: Text(
+                player.name,
+                overflow: TextOverflow.ellipsis,
+                style: MwText.t(16,
+                    weight: MwText.bold, color: p.secondaryForeground),
               ),
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                player.role.label,
-                style: TextStyle(
-                    color: color, fontWeight: FontWeight.w800, fontSize: 14),
-              ),
-              Text(
-                (player.word ?? '—').toUpperCase(),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.5,
-                  color: context.palette.mutedForeground,
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  player.role.label,
+                  style: MwText.t(14,
+                      weight: MwText.black, color: p.secondaryForeground),
                 ),
-              ),
-            ],
-          ),
-        ],
+                if (player.word != null)
+                  Text(
+                    player.word!.toUpperCase(),
+                    style: MwText.t(10,
+                        weight: MwText.medium,
+                        tracking: 0.05,
+                        color: p.mutedForeground),
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
