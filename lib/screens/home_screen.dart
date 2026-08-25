@@ -81,7 +81,7 @@ class HomeScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 24),
                           Text(
-                            'Versie 1.0.5 • Meneer Wit - Door Alex Lamper'
+                            'Versie 1.0.6 • Meneer Wit - Door Alex Lamper'
                                 .toUpperCase(),
                             textAlign: TextAlign.center,
                             style: MwText.t(
