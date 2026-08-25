@@ -9,9 +9,9 @@
 // Flatten them afterwards with store_screenshots/flatten.ps1.
 import puppeteer from 'puppeteer-core';
 
-const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const BASE = 'http://localhost:8099/index.html';
-const OUT_ROOT = 'C:\\Projects\\MeneerWitApp\\store_screenshots';
+const OUT_ROOT = 'C:/Projects/MeneerWitApp/store_screenshots';
 
 const DEVICES = [
   // 428x926 logical @ DSF 3 => 1284x2778 physical (iPhone 6.5"/6.7").
@@ -26,23 +26,32 @@ const DEVICES = [
   },
 ];
 
-// `click` (optional, keyed by device dir) taps a point after load, as
-// fractions of the viewport, e.g. to get past the name-entry step to the
-// card itself. The "Bekijk kaart" button sits at a different height per
-// device because the form is vertically centered on tablets.
+// `clicks` (optional, keyed by device dir) taps a list of points after load, as
+// fractions of the viewport, waiting `wait` ms after each. The card reveal
+// needs two: "Bekijk kaart" to get past the name-entry step, then the card
+// itself to flip it face up (the flip animation runs 700ms). Both sit at a
+// different height per device because the form is vertically centered.
 const SHOTS = [
-  { name: '1_home',        shot: 'home' },
+  { name: '1_home', shot: 'home' },
   {
     name: '2_card_reveal',
     shot: 'reveal',
-    click: {
-      appstore:      { fx: 0.5, fy: 543 / 926 },
-      appstore_ipad: { fx: 0.5, fy: 0.535 },
+    clicks: {
+      appstore: [
+        { fx: 0.5, fy: 0.602, wait: 1200 }, // "Bekijk kaart"
+        { fx: 0.5, fy: 0.468, wait: 1800 }, // flip the card face up
+      ],
+      appstore_ipad: [
+        { fx: 0.5, fy: 0.568, wait: 1200 },
+        { fx: 0.5, fy: 0.478, wait: 1800 },
+      ],
     },
   },
-  { name: '3_hint',        shot: 'hint' },
-  { name: '4_voting',      shot: 'vote' },
-  { name: '5_game_over',   shot: 'gameover' },
+  { name: '3_hint', shot: 'hint' },
+  { name: '4_voting', shot: 'vote' },
+  // The winner confetti runs for 5s; wait it out so no stray specks land on
+  // the text.
+  { name: '5_game_over', shot: 'gameover', settle: 11000 },
   { name: '6_leaderboard', shot: 'leaderboard' },
 ];
 
@@ -58,16 +67,15 @@ for (const { dir, viewport } of DEVICES) {
   });
   const page = await browser.newPage();
   await page.setViewport(viewport);
-  for (const { name, shot, click } of SHOTS) {
+  for (const { name, shot, clicks, settle } of SHOTS) {
     await page.goto(`${BASE}?shot=${shot}`, { waitUntil: 'networkidle2', timeout: 60000 });
     // Let Flutter finish first frame + fonts.
-    await sleep(4000);
-    const c = click && click[dir];
-    if (c) {
+    await sleep(settle ?? 5000);
+    for (const c of (clicks && clicks[dir]) || []) {
       await page.mouse.click(c.fx * viewport.width, c.fy * viewport.height);
-      await sleep(1500);
+      await sleep(c.wait);
     }
-    const out = `${OUT_ROOT}\\${dir}\\${name}.png`;
+    const out = `${OUT_ROOT}/${dir}/${name}.png`;
     await page.screenshot({ path: out, type: 'png' });
     console.log(`saved ${dir}/${name}.png`);
   }
