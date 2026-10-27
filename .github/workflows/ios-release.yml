@@ -1,9 +1,17 @@
 name: iOS Build & Upload to TestFlight
 
 on:
-  # push:           # Uncomment these 3 lines to re-enable automatic TestFlight builds on push to main
-  #   branches:
-  #     - main
+  # Every push to main builds and uploads a new TestFlight build. Pushes that
+  # only touch docs, store screenshots or Android/web files are skipped.
+  # Comment this block out to go back to manual-only.
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**/*.md"
+      - "store_screenshots/**"
+      - "android/**"
+      - "web/**"
   workflow_dispatch:
     inputs:
       build_name:
@@ -11,9 +19,14 @@ on:
         required: false
         default: ""
       build_number:
-        description: "Build number — MUST be higher than the last uploaded build. Leave blank to use the run number."
+        description: "Build number — MUST be higher than the last uploaded build. Leave blank to pick one automatically."
         required: false
         default: ""
+
+# Never run two uploads at once: a second push waits for the first to finish.
+concurrency:
+  group: ios-release
+  cancel-in-progress: false
 
 jobs:
   build-and-upload-ios:
@@ -133,7 +146,17 @@ jobs:
           if [ -z "$BUILD_NAME" ]; then
             BUILD_NAME="$(grep '^version:' pubspec.yaml | sed 's/version:[[:space:]]*//' | cut -d'+' -f1)"
           fi
-          BUILD_NUMBER="${{ github.event.inputs.build_number || github.run_number }}"
+          # Build number: the manual input if given. Otherwise the highest of
+          # the pubspec build number (the part after "+") and run_number + 20.
+          # The +20 offset is needed because builds up to 15 were uploaded by
+          # hand while this workflow had only reached run 5; run_number only
+          # ever increases, so consecutive pushes can never collide.
+          BUILD_NUMBER="${{ github.event.inputs.build_number }}"
+          if [ -z "$BUILD_NUMBER" ]; then
+            PUBSPEC_BUILD="$(grep '^version:' pubspec.yaml | cut -d'+' -f2 | tr -dc '0-9')"
+            RUN_BUILD=$(( ${{ github.run_number }} + 20 ))
+            BUILD_NUMBER=$(( ${PUBSPEC_BUILD:-0} > RUN_BUILD ? ${PUBSPEC_BUILD:-0} : RUN_BUILD ))
+          fi
           echo "Building $BUILD_NAME ($BUILD_NUMBER)"
 
           flutter build ios --release --no-codesign \
