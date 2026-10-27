@@ -128,4 +128,75 @@ void main() {
     expect(WordRepository.instance.categories.length, 24);
     expect(WordRepository.instance.totalPairs, 1619);
   });
+
+  test('mister white never starts the first round', () {
+    for (var i = 0; i < 50; i++) {
+      final g = newGame(5, undercover: 1, mrWhite: 1);
+      expect(g.startingPlayer?.role, isNot(Role.misterWhite));
+    }
+  });
+
+  test('mister white guess ignores accents, case and empty input', () {
+    final g = GameController(appState);
+    g.startGame(
+      names: ['A', 'B', 'C', 'D'],
+      gameSettings: GameSettings(
+          undercoverCount: 0, mrWhiteCount: 1, useCustomWords: true),
+      custom: const [WordPair('Crème brûlée', 'Pudding')],
+    );
+    final mw = g.players.firstWhere((p) => p.role == Role.misterWhite);
+    g.eliminate(mw);
+    g.submitMisterWhiteGuess('   ');
+    expect(g.phase, GamePhase.mrWhiteGuess);
+    g.submitMisterWhiteGuess('creme  BRULEE');
+    expect(g.winner, Winner.misterWhite);
+  });
+
+  test('new words re-deal cards only to players still in the game', () {
+    final g = newGame(5, undercover: 1);
+    while (g.phase == GamePhase.cardReveal) {
+      g.nextReveal();
+    }
+    final burger = g.players.firstWhere((p) => p.role == Role.burger);
+    burger.isEliminated = true;
+    g.regenerateWord();
+    expect(g.phase, GamePhase.cardReveal);
+    expect(g.revealTotal, 4);
+    final seen = <Player>[];
+    while (g.phase == GamePhase.cardReveal) {
+      seen.add(g.currentRevealPlayer);
+      g.nextReveal();
+    }
+    expect(seen.contains(burger), isFalse);
+    expect(g.phase, GamePhase.hintRound);
+  });
+
+  test('play again keeps names but deals new roles and resets the game', () {
+    final g = newGame(6, undercover: 2, mrWhite: 1);
+    g.eliminate(g.players.first);
+    g.nextRound();
+    expect(g.phase, GamePhase.cardReveal);
+    expect(g.round, 1);
+    expect(g.players.map((p) => p.name), [for (var i = 0; i < 6; i++) 'P$i']);
+    expect(g.players.where((p) => p.isEliminated), isEmpty);
+    expect(g.players.where((p) => p.role == Role.undercover).length, 2);
+    expect(g.players.where((p) => p.role == Role.misterWhite).length, 1);
+    expect(g.revealTotal, 6);
+  });
+
+  test('duplicate names are detected case-insensitively', () {
+    final g = GameController(appState);
+    g.configureGame(count: 3, gameSettings: GameSettings());
+    g.setCurrentRevealName('Emma');
+    g.nextReveal();
+    expect(g.isNameTaken('emma '), isTrue);
+    expect(g.isNameTaken('Noa'), isFalse);
+  });
+
+  test('a player added mid-game is a burger with the burger word', () {
+    final g = newGame(4);
+    final added = g.addPlayerMidGame('Nieuw');
+    expect(added.role, Role.burger);
+    expect(added.word, g.wordPair.burger);
+  });
 }

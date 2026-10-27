@@ -2,6 +2,7 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 
+import '../app_info.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'config_screen.dart';
@@ -39,6 +40,13 @@ class HomeScreen extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 20),
+                    Text(
+                      'Wie is de undercover?',
+                      textAlign: TextAlign.center,
+                      style: MwText.t(20,
+                          weight: MwText.black, tracking: -0.02),
+                    ),
+                    const SizedBox(height: 6),
                     Text(
                       'De gratis Nederlandse versie van Undercover & Mister White - met onbeperkte woorden.',
                       textAlign: TextAlign.center,
@@ -81,7 +89,7 @@ class HomeScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 24),
                           Text(
-                            'Versie 1.0.6 • Meneer Wit - Door Alex Lamper'
+                            'Versie $kAppVersion • Meneer Wit - Door Alex Lamper'
                                 .toUpperCase(),
                             textAlign: TextAlign.center,
                             style: MwText.t(
@@ -182,7 +190,10 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    return InkWell(
+    return MwPressable(
+      onTap: onTap,
+      scale: 0.92,
+      child: InkWell(
       borderRadius: BorderRadius.circular(MwRadius.xl),
       onTap: onTap,
       child: Padding(
@@ -199,7 +210,7 @@ class _NavItem extends StatelessWidget {
                 borderRadius: BorderRadius.circular(MwRadius.xl),
                 boxShadow: mwShadowSm(),
               ),
-              child: Icon(icon, size: 20, color: p.secondaryForeground),
+              child: Icon(icon, size: 20, color: p.primary),
             ),
             const SizedBox(height: 4),
             Text(
@@ -213,6 +224,7 @@ class _NavItem extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }

@@ -29,8 +29,15 @@ class GameController extends ChangeNotifier {
   Winner? winner;
 
   int _startingPlayerId = 0;
-  int _revealIndex = 0;
-  int get revealIndex => _revealIndex;
+
+  /// Indexes into [players] that still need to see their card, in order.
+  /// Eliminated players are skipped when cards are re-dealt mid-game.
+  List<int> _revealQueue = [];
+  int _revealStep = 0;
+
+  /// Position in the current reveal queue (0-based); used as a widget key.
+  int get revealIndex => _revealStep;
+  int get revealTotal => _revealQueue.length;
 
   Player? lastEliminated;
   bool mrWhiteGuessedWrong = false;
@@ -44,8 +51,8 @@ class GameController extends ChangeNotifier {
   String? get misterWhiteHint =>
       settings.misterWhiteHintEnabled ? 'Categorie: $_categoryLabel' : null;
 
-  Player get currentRevealPlayer => players[_revealIndex];
-  bool get isLastReveal => _revealIndex >= players.length - 1;
+  Player get currentRevealPlayer => players[_revealQueue[_revealStep]];
+  bool get isLastReveal => _revealStep >= _revealQueue.length - 1;
 
   /// Players ordered for the hint round: the starting player first, then by id.
   List<Player> get hintOrder {
@@ -96,6 +103,14 @@ class GameController extends ChangeNotifier {
   bool get currentNameIsPlaceholder =>
       currentRevealPlayer.name == 'Speler ${currentRevealPlayer.id + 1}';
 
+  /// Whether [name] is already taken by another player in this game.
+  bool isNameTaken(String name) {
+    final n = name.trim().toLowerCase();
+    if (n.isEmpty) return false;
+    final current = currentRevealPlayer;
+    return players.any((p) => p != current && p.name.toLowerCase() == n);
+  }
+
   /// Store the name entered by the player currently revealing their card.
   void setCurrentRevealName(String name) {
     final trimmed = name.trim();
@@ -104,22 +119,12 @@ class GameController extends ChangeNotifier {
   }
 
   /// Replace everyone's word, keeping the same roles (the "Woorden" action in
-  /// the describe phase). Players keep their alive/eliminated state.
+  /// the describe phase), then pass the phone round again so every player
+  /// still in the game sees their new word.
   void regenerateWord() {
-    final pool = settings.useCustomWords && customWords.isNotEmpty
-        ? customWords
-        : WordRepository.instance.pairsFor(settings.category);
-    _wordPair = pool.isEmpty
-        ? const WordPair('Appel', 'Peer')
-        : pool[_rng.nextInt(pool.length)];
-    for (final p in players) {
-      p.word = switch (p.role) {
-        Role.burger => _wordPair.burger,
-        Role.undercover => _wordPair.undercover,
-        Role.misterWhite => null,
-      };
-    }
-    notifyListeners();
+    _wordPair = _pickWordPair();
+    _dealWords();
+    _enterCardReveal(onlyAlive: true);
   }
 
   /// Add a player mid-game as a Burger with the current word. Returns the new
@@ -154,15 +159,34 @@ class GameController extends ChangeNotifier {
     }
 
     // Word
+    _categoryLabel =
+        settings.useCustomWords ? 'Eigen woorden' : settings.category;
+    _wordPair = _pickWordPair();
+    _dealWords();
+    _startingPlayerId = _pickStarter();
+  }
+
+  WordPair _pickWordPair() {
     final pool = settings.useCustomWords && customWords.isNotEmpty
         ? customWords
         : WordRepository.instance.pairsFor(settings.category);
-    _categoryLabel =
-        settings.useCustomWords ? 'Eigen woorden' : settings.category;
-    _wordPair = pool.isEmpty
-        ? const WordPair('Appel', 'Peer')
-        : pool[_rng.nextInt(pool.length)];
+    if (pool.isEmpty) return const WordPair('Appel', 'Peer');
+    // Avoid dealing the exact same pair twice in a row when possible.
+    if (pool.length > 1) {
+      var next = pool[_rng.nextInt(pool.length)];
+      for (var tries = 0;
+          tries < 8 &&
+              next.burger == _wordPair.burger &&
+              next.undercover == _wordPair.undercover;
+          tries++) {
+        next = pool[_rng.nextInt(pool.length)];
+      }
+      return next;
+    }
+    return pool.first;
+  }
 
+  void _dealWords() {
     for (final p in players) {
       p.word = switch (p.role) {
         Role.burger => _wordPair.burger,
@@ -170,24 +194,35 @@ class GameController extends ChangeNotifier {
         Role.misterWhite => null,
       };
     }
-
-    _startingPlayerId = players[_rng.nextInt(players.length)].id;
   }
 
-  void _enterCardReveal() {
+  /// A random starting player who is not Mister White (he would have nothing
+  /// to go on), falling back to anyone if only Mister Whites remain.
+  int _pickStarter() {
+    final candidates =
+        alivePlayers.where((p) => p.role != Role.misterWhite).toList();
+    final pool = candidates.isEmpty ? alivePlayers : candidates;
+    return pool[_rng.nextInt(pool.length)].id;
+  }
+
+  void _enterCardReveal({bool onlyAlive = false}) {
     phase = GamePhase.cardReveal;
     winner = null;
     lastEliminated = null;
     mrWhiteGuessedWrong = false;
     mrWhiteGuessAttempt = '';
-    _revealIndex = 0;
+    _revealQueue = [
+      for (var i = 0; i < players.length; i++)
+        if (!onlyAlive || !players[i].isEliminated) i,
+    ];
+    _revealStep = 0;
     notifyListeners();
   }
 
   // ----- Card reveal -----
   void nextReveal() {
-    if (_revealIndex < players.length - 1) {
-      _revealIndex++;
+    if (_revealStep < _revealQueue.length - 1) {
+      _revealStep++;
       notifyListeners();
     } else {
       phase = GamePhase.hintRound;
@@ -221,8 +256,9 @@ class GameController extends ChangeNotifier {
   // ----- Mister White guess -----
   void submitMisterWhiteGuess(String guess) {
     mrWhiteGuessAttempt = guess.trim();
-    final correct = mrWhiteGuessAttempt.toLowerCase() ==
-        _wordPair.burger.toLowerCase().trim();
+    if (mrWhiteGuessAttempt.isEmpty) return;
+    final correct = _normalize(mrWhiteGuessAttempt) ==
+        _normalize(_wordPair.burger);
     if (correct) {
       _finish(Winner.misterWhite, guessWin: true);
     } else {
@@ -230,6 +266,19 @@ class GameController extends ChangeNotifier {
       phase = GamePhase.eliminationReveal;
       notifyListeners();
     }
+  }
+
+  /// Case-, accent- and whitespace-insensitive comparison key, so "Crème
+  /// brûlée" matches "creme brulee".
+  static String _normalize(String s) {
+    const from = 'àáâäãåèéêëìíîïòóôöõùúûüýÿçñ';
+    const to = 'aaaaaaeeeeiiiiooooouuuuyycn';
+    final buf = StringBuffer();
+    for (final ch in s.toLowerCase().trim().split('')) {
+      final i = from.indexOf(ch);
+      buf.write(i == -1 ? ch : to[i]);
+    }
+    return buf.toString().replaceAll(RegExp(r'\s+'), ' ');
   }
 
   void skipMisterWhiteGuess() {
@@ -286,25 +335,13 @@ class GameController extends ChangeNotifier {
   }
 
   // ----- Post-game -----
-  /// New word, same players & roles (matches "De rollen blijven hetzelfde").
+  /// "Opnieuw spelen": a brand-new game with the same players. As in the
+  /// official Undercover rules, roles are dealt again at random with a new
+  /// word pair — everyone's role was just revealed, so keeping them would
+  /// spoil the next game. Names are kept and pre-filled.
   void nextRound() {
-    final pool = settings.useCustomWords && customWords.isNotEmpty
-        ? customWords
-        : WordRepository.instance.pairsFor(settings.category);
-    _wordPair = pool.isEmpty
-        ? const WordPair('Appel', 'Peer')
-        : pool[_rng.nextInt(pool.length)];
-    for (final p in players) {
-      p.isEliminated = false;
-      p.votes = 0;
-      p.word = switch (p.role) {
-        Role.burger => _wordPair.burger,
-        Role.undercover => _wordPair.undercover,
-        Role.misterWhite => null,
-      };
-    }
-    _startingPlayerId = players[_rng.nextInt(players.length)].id;
     round = 1;
+    _assignRolesAndWord();
     _enterCardReveal();
   }
 }

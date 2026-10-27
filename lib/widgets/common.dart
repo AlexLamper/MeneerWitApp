@@ -1,8 +1,10 @@
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../models/game_models.dart';
 import '../storage/app_storage.dart';
 import '../theme.dart';
 
@@ -108,6 +110,7 @@ class MwBackground extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           const _BodyGlow(),
+          const _CornerGlow(),
           SafeArea(
             top: top,
             bottom: bottom,
@@ -177,6 +180,174 @@ class _BodyGlow extends StatelessWidget {
   }
 }
 
+/// A soft second glow in the bottom-right corner (primary2-tinted) that
+/// gives the page some depth without competing with the content.
+class _CornerGlow extends StatelessWidget {
+  const _CornerGlow();
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: RadialGradient(
+            center: const Alignment(1.1, 1.15),
+            radius: 0.9,
+            colors: [p.glow2, p.glow2.withValues(alpha: 0)],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Motion helpers
+// ---------------------------------------------------------------------------
+
+/// Wraps a tappable surface so it squishes slightly while pressed.
+class MwPressable extends StatefulWidget {
+  const MwPressable({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.scale = 0.96,
+  });
+
+  final Widget child;
+  final VoidCallback? onTap;
+  final double scale;
+
+  @override
+  State<MwPressable> createState() => _MwPressableState();
+}
+
+class _MwPressableState extends State<MwPressable> {
+  bool _down = false;
+
+  void _set(bool v) {
+    if (_down != v) setState(() => _down = v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.onTap != null;
+    return Listener(
+      onPointerDown: enabled ? (_) => _set(true) : null,
+      onPointerUp: enabled ? (_) => _set(false) : null,
+      onPointerCancel: enabled ? (_) => _set(false) : null,
+      child: AnimatedScale(
+        scale: _down ? widget.scale : 1,
+        duration: const Duration(milliseconds: 110),
+        curve: Curves.easeOut,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Players & roles
+// ---------------------------------------------------------------------------
+
+/// Round avatar with the player's initial, coloured per player id.
+class PlayerAvatar extends StatelessWidget {
+  const PlayerAvatar({
+    super.key,
+    required this.name,
+    required this.id,
+    this.size = 32,
+    this.muted = false,
+  });
+
+  final String name;
+  final int id;
+  final double size;
+  final bool muted;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final base =
+        MwPalette.avatarColors[id % MwPalette.avatarColors.length];
+    final color = muted ? p.mutedForeground : base;
+    final trimmed = name.trim();
+    final initial =
+        trimmed.isEmpty ? '?' : trimmed.characters.first.toUpperCase();
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [color, Color.lerp(color, Colors.black, 0.2)!],
+        ),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: p.isDark ? 0.12 : 0.6),
+          width: 1.5,
+        ),
+      ),
+      child: Text(
+        initial,
+        style: MwText.t(size * 0.42,
+            weight: MwText.black, height: 1, color: Colors.white),
+      ),
+    );
+  }
+}
+
+extension RoleStyle on Role {
+  Color get color => switch (this) {
+        Role.burger => MwPalette.burgerColor,
+        Role.undercover => MwPalette.undercoverColor,
+        Role.misterWhite => MwPalette.misterWhiteColor,
+      };
+
+  IconData get icon => switch (this) {
+        Role.burger => Icons.groups_rounded,
+        Role.undercover => Icons.theater_comedy_rounded,
+        Role.misterWhite => Icons.help_outline_rounded,
+      };
+}
+
+/// Small coloured pill naming a role.
+class RoleBadge extends StatelessWidget {
+  const RoleBadge(this.role, {super.key, this.large = false});
+
+  final Role role;
+  final bool large;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = role.color;
+    final fs = large ? 14.0 : 10.0;
+    return Container(
+      padding: EdgeInsets.symmetric(
+          horizontal: large ? 14 : 8, vertical: large ? 6 : 3),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(MwRadius.full),
+        border: Border.all(color: c.withValues(alpha: 0.45)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(role.icon, size: fs + 2, color: c),
+          SizedBox(width: large ? 6 : 4),
+          Text(
+            role.label.toUpperCase(),
+            style: MwText.t(fs, weight: MwText.black, tracking: 0.06, color: c),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Text helpers
 // ---------------------------------------------------------------------------
@@ -190,6 +361,7 @@ class MwGradientText extends StatelessWidget {
     this.textAlign,
     this.maxLines,
     this.overflow,
+    this.brand = false,
   });
 
   final String text;
@@ -198,16 +370,24 @@ class MwGradientText extends StatelessWidget {
   final int? maxLines;
   final TextOverflow? overflow;
 
+  /// Paint with the primary → primary2 brand gradient instead of the
+  /// foreground fade.
+  final bool brand;
+
   @override
   Widget build(BuildContext context) {
-    final fg = context.palette.foreground;
+    final p = context.palette;
+    final fg = p.foreground;
     return ShaderMask(
       blendMode: BlendMode.srcIn,
-      shaderCallback: (bounds) => LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [fg, fg.withValues(alpha: 0.6)],
-      ).createShader(bounds),
+      shaderCallback: (bounds) => (brand
+              ? p.brandGradient
+              : LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [fg, fg.withValues(alpha: 0.6)],
+                ))
+          .createShader(bounds),
       child: Text(
         text,
         textAlign: textAlign,
@@ -228,8 +408,24 @@ class BrandTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MwGradientText(
-      'Meneer Wit',
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: 'Meneer ',
+            style: TextStyle(color: context.palette.foreground),
+          ),
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: MwGradientText(
+              'Wit',
+              brand: true,
+              style: MwText.t(fontSize, weight: MwText.black, tracking: -0.05),
+            ),
+          ),
+        ],
+      ),
       textAlign: TextAlign.center,
       style: MwText.t(fontSize, weight: MwText.black, tracking: -0.05),
     );
@@ -323,12 +519,17 @@ class MwCircleButton extends StatelessWidget {
     final p = context.palette;
     return Tooltip(
       message: tooltip ?? '',
-      child: SizedBox(
+      child: MwPressable(
+        onTap: onPressed,
+        scale: 0.9,
+        child: SizedBox(
         width: 40,
         height: 40,
         child: Material(
           color: p.secondary,
-          shape: const CircleBorder(),
+          shape: CircleBorder(
+            side: BorderSide(color: p.border.withValues(alpha: 0.7)),
+          ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: onPressed,
@@ -336,6 +537,7 @@ class MwCircleButton extends StatelessWidget {
               child: Icon(icon, size: iconSize, color: p.secondaryForeground),
             ),
           ),
+        ),
         ),
       ),
     );
@@ -461,9 +663,9 @@ class InfoPill extends StatelessWidget {
 
 enum MwButtonVariant { primary, secondary, destructive, muted }
 
-/// Full-width button matching the site's `py-* bg-* rounded-* font-bold`
-/// pattern. [height] is the resolved `padding-y * 2 + line-height`.
-class MwButton extends StatelessWidget {
+/// Full-width game button: a gradient face sitting on a darker "edge" that
+/// presses down when tapped. [height] is the face height (edge excluded).
+class MwButton extends StatefulWidget {
   const MwButton({
     super.key,
     required this.label,
@@ -489,64 +691,139 @@ class MwButton extends StatelessWidget {
   final bool bordered;
   final bool shadow;
 
-  /// Overrides the default `shadow-lg` on primary buttons.
+  /// Overrides the default glow under primary buttons.
   final List<BoxShadow>? shadows;
   final double iconSize;
+
+  /// Height of the 3D edge under the face.
+  static const edge = 4.0;
+
+  @override
+  State<MwButton> createState() => _MwButtonState();
+}
+
+class _MwButtonState extends State<MwButton> {
+  bool _down = false;
+
+  void _set(bool v) {
+    if (_down != v) setState(() => _down = v);
+  }
 
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    final (Color bg, Color fg) = switch (variant) {
-      MwButtonVariant.primary => (p.primary, p.primaryForeground),
-      MwButtonVariant.destructive => (p.destructive, p.destructiveForeground),
-      MwButtonVariant.secondary ||
-      MwButtonVariant.muted =>
-        (p.secondary, p.secondaryForeground),
-    };
-    final enabled = onTap != null;
-    final radiusGeom = BorderRadius.circular(radius);
+    final w = widget;
+    final enabled = w.onTap != null;
+
+    final Gradient? gradient;
+    final Color face;
+    final Color edgeColor;
+    final Color fg;
+    switch (w.variant) {
+      case MwButtonVariant.primary:
+        gradient = p.fillGradient;
+        face = p.primary;
+        edgeColor = p.primaryDeep;
+        fg = Colors.white;
+      case MwButtonVariant.destructive:
+        final red = p.isDark ? const Color(0xFFDC2626) : p.destructive;
+        gradient = null;
+        face = red;
+        edgeColor = Color.lerp(red, Colors.black, 0.35)!;
+        fg = Colors.white;
+      case MwButtonVariant.secondary:
+      case MwButtonVariant.muted:
+        gradient = null;
+        face = p.secondary;
+        edgeColor = p.isDark
+            ? Color.lerp(p.secondary, Colors.black, 0.45)!
+            : Color.lerp(p.border, Colors.black, 0.08)!;
+        fg = p.secondaryForeground;
+    }
+
+    final pressed = _down && enabled;
+    final drop = pressed ? MwButton.edge - 1 : 0.0;
+    final radius = BorderRadius.circular(w.radius);
+    final glow = w.shadows ??
+        (w.shadow && w.variant == MwButtonVariant.primary && !pressed
+            ? mwShadowLg(p.primary, p.isDark ? 0.35 : 0.3)
+            : null);
 
     return Opacity(
-      opacity: enabled ? 1 : 0.3,
-      child: Container(
-        height: height,
-        decoration: BoxDecoration(
-          borderRadius: radiusGeom,
-          boxShadow: shadows ??
-              (shadow && variant == MwButtonVariant.primary
-                  ? mwShadowLg()
-                  : null),
-        ),
-        child: Material(
-          color: bg,
-          borderRadius: radiusGeom,
-          child: InkWell(
-            borderRadius: radiusGeom,
-            onTap: onTap,
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: radiusGeom,
-                border:
-                    bordered ? Border.all(color: p.border, width: 2) : null,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: MwText.t(fontSize,
-                          weight: MwText.bold, color: fg),
+      opacity: enabled ? 1 : 0.4,
+      child: Semantics(
+        button: true,
+        enabled: enabled,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: enabled ? (_) => _set(true) : null,
+          onTapCancel: enabled ? () => _set(false) : null,
+          onTapUp: enabled ? (_) => _set(false) : null,
+          onTap: enabled
+              ? () {
+                  HapticFeedback.selectionClick();
+                  w.onTap!();
+                }
+              : null,
+          child: SizedBox(
+            height: w.height + MwButton.edge,
+            child: Stack(
+              children: [
+                // Edge
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: w.height,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: edgeColor,
+                      borderRadius: radius,
+                      boxShadow: glow,
                     ),
                   ),
-                  if (icon != null) ...[
-                    const SizedBox(width: 8),
-                    Icon(icon, size: iconSize, color: fg),
-                  ],
-                ],
-              ),
+                ),
+                // Face
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 90),
+                  curve: Curves.easeOut,
+                  left: 0,
+                  right: 0,
+                  top: drop,
+                  height: w.height,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: gradient == null ? face : null,
+                      gradient: gradient,
+                      borderRadius: radius,
+                      border: w.bordered
+                          ? Border.all(color: p.border, width: 2)
+                          : null,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            w.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: MwText.t(w.fontSize,
+                                weight: MwText.black,
+                                tracking: -0.01,
+                                color: fg),
+                          ),
+                        ),
+                        if (w.icon != null) ...[
+                          const SizedBox(width: 8),
+                          Icon(w.icon, size: w.iconSize, color: fg),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -700,7 +977,10 @@ class MwStepperButton extends StatelessWidget {
     final enabled = onTap != null;
     return Opacity(
       opacity: enabled ? 1 : 0.3,
-      child: SizedBox(
+      child: MwPressable(
+        onTap: onTap,
+        scale: 0.85,
+        child: SizedBox(
         width: 28,
         height: 28,
         child: Material(
@@ -713,6 +993,7 @@ class MwStepperButton extends StatelessWidget {
               child: Icon(icon, size: 14, color: p.secondaryForeground),
             ),
           ),
+        ),
         ),
       ),
     );
@@ -813,7 +1094,10 @@ class MwDialog extends StatelessWidget {
             Text(
               title,
               textAlign: TextAlign.center,
-              style: MwText.t(24, weight: MwText.bold, color: p.cardForeground),
+              style: MwText.t(24,
+                  weight: MwText.black,
+                  tracking: -0.02,
+                  color: p.cardForeground),
             ),
             if (message != null) ...[
               const SizedBox(height: 8),
@@ -850,9 +1134,11 @@ Future<T?> showMwDialog<T>(
     barrierDismissible: true,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
     barrierColor: Colors.transparent,
-    transitionDuration: const Duration(milliseconds: 200),
+    transitionDuration: const Duration(milliseconds: 220),
     pageBuilder: (ctx, a1, a2) => builder(ctx),
     transitionBuilder: (ctx, anim, _, child) {
+      final curved =
+          CurvedAnimation(parent: anim, curve: Curves.easeOutBack);
       return FadeTransition(
         opacity: anim,
         child: Stack(
@@ -863,7 +1149,10 @@ Future<T?> showMwDialog<T>(
                 child: ColoredBox(color: p.background.withValues(alpha: 0.8)),
               ),
             ),
-            child,
+            ScaleTransition(
+              scale: Tween(begin: 0.94, end: 1.0).animate(curved),
+              child: child,
+            ),
           ],
         ),
       );

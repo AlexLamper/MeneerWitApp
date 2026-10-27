@@ -114,8 +114,17 @@ class _ConfigScreenState extends State<ConfigScreen> {
                   // ----- Player count -----
                   const SectionLabel('Aantal spelers'),
                   const SizedBox(height: 4),
-                  Text(
-                    '$_count spelers',
+                  Text.rich(
+                    TextSpan(children: [
+                      WidgetSpan(
+                        alignment: PlaceholderAlignment.baseline,
+                        baseline: TextBaseline.alphabetic,
+                        child: MwGradientText('$_count',
+                            brand: true,
+                            style: MwText.t(30, weight: MwText.black)),
+                      ),
+                      const TextSpan(text: ' spelers'),
+                    ]),
                     style: MwText.t(30, weight: MwText.bold),
                   ),
                   const SizedBox(height: 8),
@@ -132,6 +141,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
                   const SizedBox(height: 8),
                   _RoleRow(
                     label: 'Burgers',
+                    color: MwPalette.burgerColor,
                     sub: 'Hebben het woord',
                     value: _burgers,
                     onMinus: _burgers > 2 ? () => _setCount(_count - 1) : null,
@@ -140,6 +150,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
                   const SizedBox(height: 8),
                   _RoleRow(
                     label: 'Undercovers',
+                    color: MwPalette.undercoverColor,
                     sub: 'Hebben een ander woord',
                     value: _settings.undercoverCount,
                     onMinus: _settings.undercoverCount > 0
@@ -153,6 +164,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
                   const SizedBox(height: 8),
                   _RoleRow(
                     label: 'Mister White',
+                    color: MwPalette.misterWhiteColor,
                     sub: 'Heeft geen woord',
                     value: _settings.mrWhiteCount,
                     onMinus: _settings.mrWhiteCount > 0
@@ -245,8 +257,10 @@ class _RoleRow extends StatelessWidget {
     required this.value,
     required this.onMinus,
     required this.onPlus,
+    required this.color,
   });
 
+  final Color color;
   final String label;
   final String sub;
   final int value;
@@ -264,6 +278,15 @@ class _RoleRow extends StatelessWidget {
       ),
       child: Row(
         children: [
+          Container(
+            width: 6,
+            height: 28,
+            margin: const EdgeInsets.only(left: 2, right: 10),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(MwRadius.full),
+            ),
+          ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

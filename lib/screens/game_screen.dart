@@ -4,6 +4,7 @@ import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../app_info.dart';
 import '../game/game_controller.dart';
 import '../models/game_models.dart';
 import '../theme.dart';
@@ -30,7 +31,26 @@ class GameScreen extends StatelessWidget {
               children: [
                 MwBackground(
                   padding: EdgeInsets.zero,
-                  child: _buildPhase(context, game),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 280),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeIn,
+                    transitionBuilder: (child, anim) => FadeTransition(
+                      opacity: anim,
+                      child: SlideTransition(
+                        position: Tween(
+                          begin: const Offset(0, 0.03),
+                          end: Offset.zero,
+                        ).animate(anim),
+                        child: child,
+                      ),
+                    ),
+                    child: KeyedSubtree(
+                      key: ValueKey('${game.phase.name}-${game.revealIndex}'
+                          '-${game.round}'),
+                      child: _buildPhase(context, game),
+                    ),
+                  ),
                 ),
                 // `fixed top-4 right-4 z-50 flex gap-2 items-center`
                 const Positioned(top: 16, right: 16, child: _TopControls()),
@@ -44,7 +64,7 @@ class GameScreen extends StatelessWidget {
 
   Widget _buildPhase(BuildContext context, GameController game) {
     return switch (game.phase) {
-      GamePhase.cardReveal => _CardRevealView(key: ValueKey(game.revealIndex)),
+      GamePhase.cardReveal => const _CardRevealView(),
       GamePhase.hintRound => const _DescribeView(),
       GamePhase.voting => const _VotingView(),
       GamePhase.eliminationReveal => const _EliminationView(),
@@ -83,16 +103,18 @@ class _TopControls extends StatelessWidget {
 
 /// `h2 text-2xl font-black mb-2 bg-clip-text … from-foreground to-foreground/60`
 class _PhaseTitle extends StatelessWidget {
-  const _PhaseTitle(this.text, {this.fontSize = 24});
+  const _PhaseTitle(this.text, {this.fontSize = 24, this.textAlign});
 
   final String text;
   final double fontSize;
+  final TextAlign? textAlign;
 
   @override
   Widget build(BuildContext context) {
     return MwGradientText(
       text,
-      style: MwText.t(fontSize, weight: MwText.black),
+      textAlign: textAlign,
+      style: MwText.t(fontSize, weight: MwText.black, tracking: -0.02),
     );
   }
 }
@@ -103,7 +125,7 @@ class _PhaseTitle extends StatelessWidget {
 enum _RevealStage { name, card }
 
 class _CardRevealView extends StatefulWidget {
-  const _CardRevealView({super.key});
+  const _CardRevealView();
 
   @override
   State<_CardRevealView> createState() => _CardRevealViewState();
@@ -136,13 +158,21 @@ class _CardRevealViewState extends State<_CardRevealView> {
       padding: const EdgeInsets.all(16),
       child: _stage == _RevealStage.name
           ? _nameEntry(context, game)
-          : _CardStage(onDone: game.nextReveal),
+          : _CardStage(
+              player: game.currentRevealPlayer,
+              label: 'Kaart ${game.revealIndex + 1} / ${game.revealTotal}',
+              doneLabel: game.isLastReveal
+                  ? 'Verberg & start ronde'
+                  : 'Verberg & geef door',
+              onDone: game.nextReveal,
+            ),
     );
   }
 
   Widget _nameEntry(BuildContext context, GameController game) {
     final p = context.palette;
     final index = game.revealIndex;
+    final player = game.currentRevealPlayer;
     return Center(
       child: SingleChildScrollView(
         child: ConstrainedBox(
@@ -152,11 +182,30 @@ class _CardRevealViewState extends State<_CardRevealView> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const _PhaseTitle('Geef de telefoon aan', fontSize: 20),
-              const SizedBox(height: 8),
+              Center(
+                child: PlayerAvatar(
+                  name: game.currentNameIsPlaceholder ? '${index + 1}' : player.name,
+                  id: player.id,
+                  size: 64,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const _PhaseTitle('Geef de telefoon aan',
+                  fontSize: 20, textAlign: TextAlign.center),
+              const SizedBox(height: 4),
               Text(
-                'Speler ${index + 1}',
-                style: MwText.t(30, weight: MwText.black),
+                game.currentNameIsPlaceholder
+                    ? 'Speler ${index + 1}'
+                    : player.name,
+                textAlign: TextAlign.center,
+                style: MwText.t(30, weight: MwText.black, tracking: -0.02),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${index + 1} van ${game.revealTotal}',
+                textAlign: TextAlign.center,
+                style: MwText.t(12,
+                    weight: MwText.bold, color: p.mutedForeground),
               ),
               const SizedBox(height: 24),
               const Align(
@@ -208,6 +257,15 @@ class _CardRevealViewState extends State<_CardRevealView> {
   }
 
   void _confirmName(GameController game) {
+    if (game.isNameTaken(_nameCtrl.text)) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(
+          content: Text('Deze naam is al gekozen! Kies een andere naam.'),
+        ));
+      return;
+    }
+    FocusScope.of(context).unfocus();
     game.setCurrentRevealName(_nameCtrl.text);
     setState(() => _stage = _RevealStage.card);
   }
@@ -215,8 +273,16 @@ class _CardRevealViewState extends State<_CardRevealView> {
 
 /// The flip card itself (front handoff -> back with the word).
 class _CardStage extends StatefulWidget {
-  const _CardStage({required this.onDone});
+  const _CardStage({
+    required this.player,
+    required this.label,
+    required this.doneLabel,
+    required this.onDone,
+  });
 
+  final Player player;
+  final String label;
+  final String doneLabel;
   final VoidCallback onDone;
 
   @override
@@ -242,8 +308,7 @@ class _CardStageState extends State<_CardStage>
   @override
   Widget build(BuildContext context) {
     final game = context.read<GameController>();
-    final player = game.currentRevealPlayer;
-    final total = game.players.length;
+    final player = widget.player;
 
     return Center(
       child: SingleChildScrollView(
@@ -253,12 +318,12 @@ class _CardStageState extends State<_CardStage>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SectionLabel('Kaart ${game.revealIndex + 1} / $total'),
+              Center(child: SectionLabel(widget.label)),
               const SizedBox(height: 12),
               GestureDetector(
                 onTap: () {
                   if (_flip.isAnimating || _revealed) return;
-                  _flip.forward();
+                  _flip.animateTo(1, curve: Curves.easeInOutBack);
                 },
                 child: AnimatedBuilder(
                   animation: _flip,
@@ -296,11 +361,8 @@ class _CardStageState extends State<_CardStage>
                 // `w-full py-4 bg-secondary rounded-2xl font-bold text-lg
                 //  border-2 border-border`
                 child: MwButton(
-                  label: game.isLastReveal
-                      ? 'Verberg & start ronde'
-                      : 'Verberg & geef door',
+                  label: widget.doneLabel,
                   variant: MwButtonVariant.secondary,
-                  bordered: true,
                   onTap: widget.onDone,
                 ),
               ),
@@ -312,8 +374,8 @@ class _CardStageState extends State<_CardStage>
   }
 }
 
-/// `aspect-3/4 rounded-[2.5rem] shadow-2xl border-2 border-border/60
-/// bg-gradient-to-br from-slate-100 to-slate-200 (dark: zinc-800 → zinc-900)`
+/// Card front: the brand gradient with a faint "?" pattern, like the back of
+/// a playing card.
 class _CardFront extends StatelessWidget {
   const _CardFront();
 
@@ -324,47 +386,104 @@ class _CardFront extends StatelessWidget {
       aspectRatio: 3 / 4,
       child: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [p.cardFaceFrom, p.cardFaceTo],
-          ),
+          gradient: p.fillGradient,
           borderRadius: BorderRadius.circular(MwRadius.modal),
-          border: Border.all(color: p.border.withValues(alpha: 0.6), width: 2),
-          boxShadow: mwShadow2Xl(),
+          boxShadow: mwShadow2Xl(p.primary, p.isDark ? 0.45 : 0.4),
         ),
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            Container(
-              width: 80,
-              height: 80,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: p.foreground.withValues(alpha: 0.08),
-                shape: BoxShape.circle,
-              ),
-              child: Text(
-                '?',
-                style: MwText.t(36,
-                    weight: MwText.black, color: p.foreground),
+            const _QuestionPattern(),
+            // Inner frame, like a printed card border.
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(MwRadius.modal - 10),
+                  border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.35), width: 2),
+                ),
               ),
             ),
-            const SizedBox(height: 24),
-            Text(
-              'Tik om te onthullen',
-              textAlign: TextAlign.center,
-              style:
-                  MwText.t(24, weight: MwText.black, color: p.foreground),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Zorg dat niemand meekijkt!',
-              textAlign: TextAlign.center,
-              style: MwText.t(14, color: p.mutedForeground),
+            Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 84,
+                    height: 84,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.5), width: 2),
+                    ),
+                    child: Text(
+                      '?',
+                      style: MwText.t(40,
+                          weight: MwText.black, color: Colors.white),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Tik om te onthullen',
+                    textAlign: TextAlign.center,
+                    style: MwText.t(24,
+                        weight: MwText.black, color: Colors.white),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Zorg dat niemand meekijkt!',
+                    textAlign: TextAlign.center,
+                    style: MwText.t(14,
+                        weight: MwText.medium,
+                        color: Colors.white.withValues(alpha: 0.8)),
+                  ),
+                ],
+              ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Faint diagonal grid of question marks behind the card front.
+class _QuestionPattern extends StatelessWidget {
+  const _QuestionPattern();
+
+  @override
+  Widget build(BuildContext context) {
+    final style = MwText.t(22,
+        weight: MwText.black,
+        height: 1,
+        color: Colors.white.withValues(alpha: 0.08));
+    return IgnorePointer(
+      child: OverflowBox(
+        maxWidth: 600,
+        maxHeight: 800,
+        child: Transform.rotate(
+          angle: -0.35,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              for (var r = 0; r < 14; r++)
+                Padding(
+                  padding: EdgeInsets.only(
+                      left: r.isEven ? 0 : 36, bottom: 26),
+                  child: Text(
+                    List.filled(10, '?').join('      '),
+                    maxLines: 1,
+                    softWrap: false,
+                    style: style,
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -398,28 +517,33 @@ class _CardBack extends StatelessWidget {
           children: [
             if (isMisterWhite) ...[
               _CardLabel('Jouw Rol'),
-              const SizedBox(height: 16),
-              Text(
-                'Mister White',
-                style: MwText.t(30,
-                    weight: MwText.black, color: p.cardForeground),
-              ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 12),
+              const RoleBadge(Role.misterWhite, large: true),
+              const SizedBox(height: 28),
               Container(width: 64, height: 1, color: p.border),
-              const SizedBox(height: 32),
+              const SizedBox(height: 28),
             ],
             _CardLabel('Jouw Woord'),
             const SizedBox(height: 16),
-            Text(
-              isMisterWhite ? '???' : (player.word ?? '???'),
-              textAlign: TextAlign.center,
-              style: MwText.t(
-                36,
-                weight: MwText.black,
-                tracking: -0.025,
-                color: p.cardForeground,
+            if (isMisterWhite || player.word == null)
+              Text(
+                '???',
+                textAlign: TextAlign.center,
+                style: MwText.t(36,
+                    weight: MwText.black,
+                    tracking: -0.025,
+                    color: p.mutedForeground),
+              )
+            else
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: MwGradientText(
+                  player.word!,
+                  brand: true,
+                  textAlign: TextAlign.center,
+                  style: MwText.t(40, weight: MwText.black, tracking: -0.03),
+                ),
               ),
-            ),
             if (isMisterWhite) ...[
               const SizedBox(height: 24),
               ConstrainedBox(
@@ -524,7 +648,14 @@ class _DescribeViewState extends State<_DescribeView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const _PhaseTitle('Omschrijf-fase'),
+          Row(
+            children: [
+              const Expanded(child: _PhaseTitle('Omschrijf-fase')),
+              _RoundBadge(round: game.round),
+              // Leave room for the pinned top-right controls.
+              const SizedBox(width: 96),
+            ],
+          ),
           const SizedBox(height: 8),
           Text(
             _peek
@@ -604,7 +735,8 @@ class _DescribeViewState extends State<_DescribeView> {
     final ok = await showMwConfirm(
       context,
       title: 'Nieuwe woorden?',
-      message: 'Iedereen krijgt een nieuw woord. De rollen blijven hetzelfde.',
+      message:
+          'Iedereen krijgt een nieuw woord en bekijkt zijn kaart opnieuw. De rollen blijven hetzelfde.',
       confirmText: 'Ja, nieuwe woorden',
     );
     if (ok) game.regenerateWord();
@@ -804,18 +936,8 @@ class _DescribePlayerCard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
               child: Row(
                 children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: p.secondary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(Icons.person_outline,
-                        size: 20, color: p.mutedForeground),
-                  ),
-                  const SizedBox(width: 6),
+                  PlayerAvatar(name: player.name, id: player.id),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -830,11 +952,12 @@ class _DescribePlayerCard extends StatelessWidget {
                               color: p.cardForeground),
                         ),
                         Text(
-                          (isStarter ? 'Start Speler' : 'Actief').toUpperCase(),
+                          (isStarter ? 'Begint' : 'Actief').toUpperCase(),
                           style: MwText.t(10,
-                              weight: MwText.medium,
+                              weight: isStarter ? MwText.black : MwText.medium,
                               tracking: 0.05,
-                              color: p.mutedForeground),
+                              color:
+                                  isStarter ? p.primary : p.mutedForeground),
                         ),
                       ],
                     ),
@@ -854,7 +977,7 @@ class _DescribePlayerCard extends StatelessWidget {
             height: 24,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: p.primary,
+              gradient: p.brandGradient,
               shape: BoxShape.circle,
               border: Border.all(color: p.background, width: 2),
               boxShadow: mwShadowMd(),
@@ -997,7 +1120,7 @@ class _SettingsDialog extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           Text(
-            'VERSIE 1.0.6 • MENEER WIT - DOOR ALEX LAMPER',
+            'VERSIE $kAppVersion • MENEER WIT - DOOR ALEX LAMPER',
             textAlign: TextAlign.center,
             style: MwText.t(10,
                 weight: MwText.bold,
@@ -1032,7 +1155,12 @@ class _AddedPlayerReveal extends StatelessWidget {
           children: [
             _PhaseTitle('${player.name} - bekijk je kaart', fontSize: 20),
             Expanded(
-              child: _CardStage(onDone: () => Navigator.pop(context)),
+              child: _CardStage(
+                player: player,
+                label: 'Nieuwe speler',
+                doneLabel: 'Verberg & terug naar spel',
+                onDone: () => Navigator.pop(context),
+              ),
             ),
           ],
         ),
@@ -1078,7 +1206,7 @@ class _VotingView extends StatelessWidget {
               children: [
                 for (final pl in alive)
                   _VoteCard(
-                      name: pl.name, onTap: () => _confirm(context, game, pl)),
+                      player: pl, onTap: () => _confirm(context, game, pl)),
               ],
             ),
           ),
@@ -1102,15 +1230,18 @@ class _VotingView extends StatelessWidget {
 
 /// `pl-2 pr-2 py-3 rounded-xl border-2 border-border bg-card shadow-sm`
 class _VoteCard extends StatelessWidget {
-  const _VoteCard({required this.name, required this.onTap});
+  const _VoteCard({required this.player, required this.onTap});
 
-  final String name;
+  final Player player;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    return DecoratedBox(
+    final name = player.name;
+    return MwPressable(
+      onTap: onTap,
+      child: DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(MwRadius.xl),
         boxShadow: mwShadowSm(),
@@ -1128,18 +1259,8 @@ class _VoteCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
             child: Row(
               children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: p.primary,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(Icons.fingerprint,
-                      size: 20, color: p.primaryForeground),
-                ),
-                const SizedBox(width: 6),
+                PlayerAvatar(name: name, id: player.id),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1163,10 +1284,13 @@ class _VoteCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                Icon(Icons.how_to_vote_outlined,
+                    size: 18, color: p.mutedForeground),
               ],
             ),
           ),
         ),
+      ),
       ),
     );
   }
@@ -1182,7 +1306,8 @@ class _EliminationView extends StatelessWidget {
   Widget build(BuildContext context) {
     final pal = context.palette;
     final game = context.read<GameController>();
-    final p = game.lastEliminated!;
+    final p = game.lastEliminated;
+    if (p == null) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Center(
@@ -1200,38 +1325,56 @@ class _EliminationView extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                Center(
+                  child: PlayerAvatar(
+                      name: p.name, id: p.id, size: 56, muted: true),
+                ),
+                const SizedBox(height: 12),
                 Text(
                   '${p.name} was...',
                   textAlign: TextAlign.center,
                   style: MwText.t(24,
-                      weight: MwText.bold, color: pal.cardForeground),
+                      weight: MwText.black, color: pal.cardForeground),
                 ),
-                const SizedBox(height: 8),
-                // `p-6 bg-secondary rounded-2xl`
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: pal.secondary,
-                    borderRadius: BorderRadius.circular(MwRadius.x2),
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        'ROL',
-                        style: MwText.t(14,
-                            weight: MwText.bold,
-                            tracking: 0.1,
-                            color: pal.mutedForeground),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        p.role.label,
-                        textAlign: TextAlign.center,
-                        style: MwText.t(36,
-                            weight: MwText.black,
-                            color: pal.secondaryForeground),
-                      ),
-                    ],
+                const SizedBox(height: 16),
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.85, end: 1),
+                  duration: const Duration(milliseconds: 450),
+                  curve: Curves.easeOutBack,
+                  builder: (context, v, child) =>
+                      Transform.scale(scale: v, child: child),
+                  child: Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: p.role.color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(MwRadius.x2),
+                      border: Border.all(
+                          color: p.role.color.withValues(alpha: 0.4),
+                          width: 2),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(p.role.icon, size: 32, color: p.role.color),
+                        const SizedBox(height: 8),
+                        Text(
+                          'ROL',
+                          style: MwText.t(12,
+                              weight: MwText.bold,
+                              tracking: 0.1,
+                              color: pal.mutedForeground),
+                        ),
+                        const SizedBox(height: 4),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            p.role.label,
+                            textAlign: TextAlign.center,
+                            style: MwText.t(36,
+                                weight: MwText.black, color: p.role.color),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 if (game.mrWhiteGuessedWrong) ...[
@@ -1277,6 +1420,18 @@ class _MrWhiteGuessView extends StatefulWidget {
 class _MrWhiteGuessViewState extends State<_MrWhiteGuessView> {
   final _controller = TextEditingController();
 
+  void _submit(GameController game) {
+    if (_controller.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(
+          content: Text('Typ eerst een woord, of kies "Ik weet het niet".'),
+        ));
+      return;
+    }
+    game.submitMisterWhiteGuess(_controller.text);
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -1287,7 +1442,8 @@ class _MrWhiteGuessViewState extends State<_MrWhiteGuessView> {
   Widget build(BuildContext context) {
     final pal = context.palette;
     final game = context.read<GameController>();
-    final p = game.lastEliminated!;
+    final p = game.lastEliminated;
+    if (p == null) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Stack(
@@ -1317,11 +1473,17 @@ class _MrWhiteGuessViewState extends State<_MrWhiteGuessView> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    const Center(
+                        child: RoleBadge(Role.misterWhite, large: true)),
+                    const SizedBox(height: 16),
                     Text(
                       '${p.name} was Mister White!',
                       textAlign: TextAlign.center,
-                      style: MwText.t(48,
-                          weight: MwText.black, color: pal.foreground),
+                      style: MwText.t(40,
+                          weight: MwText.black,
+                          height: 1.1,
+                          tracking: -0.02,
+                          color: pal.foreground),
                     ),
                     const SizedBox(height: 16),
                     Opacity(
@@ -1359,7 +1521,7 @@ class _MrWhiteGuessViewState extends State<_MrWhiteGuessView> {
                           borderSide: BorderSide(color: pal.primary, width: 2),
                         ),
                       ),
-                      onSubmitted: game.submitMisterWhiteGuess,
+                      onSubmitted: (_) => _submit(game),
                     ),
                     const SizedBox(height: 32),
                     MwButton(
@@ -1367,8 +1529,7 @@ class _MrWhiteGuessViewState extends State<_MrWhiteGuessView> {
                       height: 68,
                       fontSize: 20,
                       shadows: mwShadow2Xl(),
-                      onTap: () =>
-                          game.submitMisterWhiteGuess(_controller.text),
+                      onTap: () => _submit(game),
                     ),
                     const SizedBox(height: 32),
                     TextButton(
@@ -1401,6 +1562,12 @@ class _GameOverView extends StatefulWidget {
   State<_GameOverView> createState() => _GameOverViewState();
 }
 
+Color _winnerColor(Winner w) => switch (w) {
+      Winner.burgers => MwPalette.burgerColor,
+      Winner.infiltrators => MwPalette.undercoverColor,
+      Winner.misterWhite => MwPalette.misterWhiteColor,
+    };
+
 class _GameOverViewState extends State<_GameOverView> {
   late final ConfettiController _confetti;
 
@@ -1420,7 +1587,8 @@ class _GameOverViewState extends State<_GameOverView> {
   Widget build(BuildContext context) {
     final p = context.palette;
     final game = context.read<GameController>();
-    final winner = game.winner!;
+    final winner = game.winner;
+    if (winner == null) return const SizedBox.shrink();
     return Stack(
       children: [
         Padding(
@@ -1439,10 +1607,21 @@ class _GameOverViewState extends State<_GameOverView> {
                     color: p.mutedForeground),
               ),
               const SizedBox(height: 16),
-              MwGradientText(
-                winner.title,
-                textAlign: TextAlign.center,
-                style: MwText.t(48, weight: MwText.black, height: 1.25),
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.8, end: 1),
+                duration: const Duration(milliseconds: 600),
+                curve: Curves.easeOutBack,
+                builder: (context, v, child) =>
+                    Transform.scale(scale: v, child: child),
+                child: Text(
+                  winner.title,
+                  textAlign: TextAlign.center,
+                  style: MwText.t(44,
+                      weight: MwText.black,
+                      height: 1.15,
+                      tracking: -0.03,
+                      color: _winnerColor(winner)),
+                ),
               ),
               const SizedBox(height: 8),
               Text(
@@ -1548,16 +1727,22 @@ class _ResultCard extends StatelessWidget {
     return Opacity(
       opacity: player.isEliminated ? 0.6 : 1,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: p.secondary,
           borderRadius: BorderRadius.circular(MwRadius.x2),
         ),
         child: Row(
           children: [
+            PlayerAvatar(
+              name: player.name,
+              id: player.id,
+              muted: player.isEliminated,
+            ),
+            const SizedBox(width: 10),
             if (player.isEliminated) ...[
               const Text('💀', style: TextStyle(fontSize: 12, height: 1)),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
             ],
             Expanded(
               child: Text(
@@ -1572,12 +1757,9 @@ class _ResultCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  player.role.label,
-                  style: MwText.t(14,
-                      weight: MwText.black, color: p.secondaryForeground),
-                ),
-                if (player.word != null)
+                RoleBadge(player.role),
+                if (player.word != null) ...[
+                  const SizedBox(height: 3),
                   Text(
                     player.word!.toUpperCase(),
                     style: MwText.t(10,
@@ -1585,10 +1767,35 @@ class _ResultCard extends StatelessWidget {
                         tracking: 0.05,
                         color: p.mutedForeground),
                   ),
+                ],
               ],
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// "Ronde N" pill in the describe phase.
+class _RoundBadge extends StatelessWidget {
+  const _RoundBadge({required this.round});
+
+  final int round;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        gradient: p.fillGradient,
+        borderRadius: BorderRadius.circular(MwRadius.full),
+      ),
+      child: Text(
+        'RONDE $round',
+        style: MwText.t(10,
+            weight: MwText.black, tracking: 0.08, color: Colors.white),
       ),
     );
   }

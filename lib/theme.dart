@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 Color _hsl(double h, double s, double l) =>
     HSLColor.fromAHSL(1.0, h, s / 100, l / 100).toColor();
 
-/// Design tokens copied 1:1 from meneerwit.com.
+/// Design tokens shared with meneerwit.com.
 ///
 /// The site is a Tailwind/shadcn app whose palette lives in two CSS blocks:
 /// `:root` (light) and `.dark`. Every value below is the exact HSL triple from
@@ -35,6 +35,9 @@ class MwPalette extends ThemeExtension<MwPalette> {
     required this.glowStop,
     required this.cardFaceFrom,
     required this.cardFaceTo,
+    required this.primary2,
+    required this.primaryDeep,
+    required this.glow2,
     required this.isDark,
   });
 
@@ -68,7 +71,53 @@ class MwPalette extends ThemeExtension<MwPalette> {
   final Color cardFaceFrom;
   final Color cardFaceTo;
 
+  /// Second brand colour (violet); primary surfaces run primary → primary2.
+  final Color primary2;
+
+  /// Darker primary used for the pressed "edge" under game buttons.
+  final Color primaryDeep;
+
+  /// Second, softer background glow in the bottom-right corner.
+  final Color glow2;
+
   final bool isDark;
+
+  // ---- Role colours (same in both themes). ---------------------------------
+  static const burgerColor = Color(0xFF10B981); // emerald-500
+  static const undercoverColor = Color(0xFFF43F5E); // rose-500
+  static const misterWhiteColor = Color(0xFFF59E0B); // amber-500
+
+  /// Avatar colours, picked per player id.
+  static const avatarColors = [
+    Color(0xFF6366F1),
+    Color(0xFFEC4899),
+    Color(0xFF14B8A6),
+    Color(0xFFF59E0B),
+    Color(0xFF8B5CF6),
+    Color(0xFF0EA5E9),
+    Color(0xFFEF4444),
+    Color(0xFF22C55E),
+    Color(0xFFF97316),
+    Color(0xFF06B6D4),
+  ];
+
+  /// Primary brand gradient (buttons, card fronts, highlights).
+  LinearGradient get brandGradient => LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [primary, primary2],
+      );
+
+  /// Gradient for filled buttons and the card front. Dark mode's primary is
+  /// light (for text and outlines), so filled surfaces use deeper shades to
+  /// keep white labels readable.
+  LinearGradient get fillGradient => isDark
+      ? LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [_hsl(239, 78, 60), _hsl(262, 72, 58)],
+        )
+      : brandGradient;
 
   // ---- Fixed Tailwind palette entries used by the leaderboard. -------------
   static const yellow500 = Color(0xFFEAB308);
@@ -108,6 +157,9 @@ class MwPalette extends ThemeExtension<MwPalette> {
     double? glowStop,
     Color? cardFaceFrom,
     Color? cardFaceTo,
+    Color? primary2,
+    Color? primaryDeep,
+    Color? glow2,
     bool? isDark,
   }) =>
       MwPalette(
@@ -136,6 +188,9 @@ class MwPalette extends ThemeExtension<MwPalette> {
         glowStop: glowStop ?? this.glowStop,
         cardFaceFrom: cardFaceFrom ?? this.cardFaceFrom,
         cardFaceTo: cardFaceTo ?? this.cardFaceTo,
+        primary2: primary2 ?? this.primary2,
+        primaryDeep: primaryDeep ?? this.primaryDeep,
+        glow2: glow2 ?? this.glow2,
         isDark: isDark ?? this.isDark,
       );
 
@@ -234,6 +289,9 @@ class AppTheme {
       glowStop: 0.65,
       cardFaceFrom: const Color(0xFFF1F5F9), // slate-100
       cardFaceTo: const Color(0xFFE2E8F0), // slate-200
+      primary2: _hsl(262, 83, 60),
+      primaryDeep: _hsl(239, 65, 42),
+      glow2: const Color(0xFFF3D9FB),
       isDark: false,
     );
     return _build(palette, Brightness.light);
@@ -265,6 +323,9 @@ class AppTheme {
       glowStop: 0.70,
       cardFaceFrom: const Color(0xFF27272A), // zinc-800
       cardFaceTo: const Color(0xFF18181B), // zinc-900
+      primary2: _hsl(262, 83, 72),
+      primaryDeep: _hsl(239, 55, 45),
+      glow2: const Color(0xFF241238),
       isDark: true,
     );
     return _build(palette, Brightness.dark);
